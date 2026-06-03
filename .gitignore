@@ -1,0 +1,8 @@
+/.idea/
+/build*/
+/cmake-build*/
+/*.pdb
+/*.ilk
+/*.obj
+/*.exe
+messages.txt

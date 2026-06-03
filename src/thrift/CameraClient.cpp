@@ -1,0 +1,135 @@
+#include "thrift/CameraClient.h"
+
+#include "app/Logger.h"
+
+#if TRACKCAMHUB_ENABLE_THRIFT
+#include "thrift/ThriftClient.h"
+#endif
+
+#include <chrono>
+
+namespace trackcamhub
+{
+
+CameraClient::~CameraClient()
+{
+    stopHeartbeat();
+}
+
+void CameraClient::configure(CameraConfig config)
+{
+    config_ = std::move(config);
+}
+
+bool CameraClient::startHeartbeat()
+{
+    stopHeartbeat();
+    stopping_.store(false);
+    heartbeat_thread_ = std::thread([this] { heartbeatLoop(); });
+    return true;
+}
+
+void CameraClient::stopHeartbeat()
+{
+    stopping_.store(true);
+    if (heartbeat_thread_.joinable())
+    {
+        heartbeat_thread_.join();
+    }
+}
+
+bool CameraClient::sendHeartbeatOnce()
+{
+#if TRACKCAMHUB_ENABLE_THRIFT
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+
+    ThriftClient<SampleReg::SampleRegLCClient> client;
+    const bool ok = client.call(config_.host, config_.port, [&](auto& stub) {
+        stub.HeartbeatToLC(timestamp);
+    });
+
+    if (!ok)
+    {
+        last_error_ = client.error();
+    }
+    return ok;
+#else
+    last_error_ = "TrackCamHub was built without Thrift support.";
+    return false;
+#endif
+}
+
+bool CameraClient::distributeCaptureTask(const std::string& task_id)
+{
+#if TRACKCAMHUB_ENABLE_THRIFT
+    SampleReg::TaskInfo task;
+    task.__set_taskId(task_id);
+    task.__set_mode(2);
+    task.__set_taskType({
+        SampleReg::TaskType::TASK_GET_BARCODE,
+        SampleReg::TaskType::TASK_GET_BEST_BARCODE_IMAGE,
+    });
+    task.__set_state(SampleReg::TaskState::Issued);
+
+    ThriftClient<SampleReg::SampleRegLCClient> client;
+    int32_t ret = -1;
+    const bool ok = client.call(config_.host, config_.port, [&](auto& stub) {
+        ret = stub.DistributeTask(task);
+    });
+
+    if (!ok)
+    {
+        last_error_ = client.error();
+        return false;
+    }
+
+    if (ret != 0)
+    {
+        last_error_ = "DistributeTask returned " + std::to_string(ret);
+        return false;
+    }
+
+    return true;
+#else
+    last_error_ = "TrackCamHub was built without Thrift support.";
+    return false;
+#endif
+}
+
+std::string CameraClient::lastError() const
+{
+    return last_error_;
+}
+
+void CameraClient::heartbeatLoop()
+{
+    int fail_count = 0;
+    bool ever_connected = false;
+
+    while (!stopping_.load())
+    {
+        if (sendHeartbeatOnce())
+        {
+            if (!ever_connected)
+            {
+                Logger::info("camera heartbeat connected: " + config_.host + ":" + std::to_string(config_.port));
+                ever_connected = true;
+            }
+            fail_count = 0;
+        }
+        else
+        {
+            ++fail_count;
+            Logger::warn("camera heartbeat failed: " + lastError());
+            if (fail_count >= config_.heartbeat_fail_max)
+            {
+                Logger::error("camera heartbeat lost: " + config_.id);
+            }
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(config_.heartbeat_interval_ms));
+    }
+}
+
+} // namespace trackcamhub
