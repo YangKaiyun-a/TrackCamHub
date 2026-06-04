@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -22,6 +24,20 @@ enum class LogLevel
 class Logger
 {
 public:
+    static void setLogFile(const std::string& path)
+    {
+        std::lock_guard<std::mutex> lock(mutex());
+        logFilePath() = path;
+        if (!path.empty())
+        {
+            const std::filesystem::path file_path(path);
+            if (file_path.has_parent_path())
+            {
+                std::filesystem::create_directories(file_path.parent_path());
+            }
+        }
+    }
+
     static void debug(const std::string& message) { write(LogLevel::Debug, message); }
     static void info(const std::string& message) { write(LogLevel::Info, message); }
     static void warn(const std::string& message) { write(LogLevel::Warn, message); }
@@ -30,8 +46,7 @@ public:
 private:
     static void write(LogLevel level, const std::string& message)
     {
-        static std::mutex mutex;
-        std::lock_guard<std::mutex> lock(mutex);
+        std::lock_guard<std::mutex> lock(mutex());
 
         const auto now = std::chrono::system_clock::now();
         const auto time = std::chrono::system_clock::to_time_t(now);
@@ -48,6 +63,15 @@ private:
 
         auto& out = level == LogLevel::Error ? std::cerr : std::cout;
         out << line.str() << std::endl;
+
+        if (!logFilePath().empty())
+        {
+            std::ofstream file(logFilePath(), std::ios::app);
+            if (file)
+            {
+                file << line.str() << std::endl;
+            }
+        }
     }
 
     static const char* toString(LogLevel level)
@@ -61,7 +85,18 @@ private:
         }
         return "UNKNOWN";
     }
+
+    static std::mutex& mutex()
+    {
+        static std::mutex instance;
+        return instance;
+    }
+
+    static std::string& logFilePath()
+    {
+        static std::string path;
+        return path;
+    }
 };
 
 } // namespace trackcamhub
-

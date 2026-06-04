@@ -6,3 +6,5 @@
 /*.obj
 /*.exe
 messages.txt
+
+dist/
