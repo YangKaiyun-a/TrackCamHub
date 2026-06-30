@@ -3,6 +3,7 @@
 #include "config/AppConfig.h"
 
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -23,15 +24,20 @@ public:
     bool startHeartbeat();
     void stopHeartbeat();
 
+    bool isConnected() const;
     bool sendHeartbeatOnce();
     bool distributeCaptureTask(const std::string& task_id);
+    bool requestCameraImage();
     std::string lastError() const;
 
 private:
     void heartbeatLoop();
+    void setLastError(std::string error);
 
     CameraConfig config_;
+    mutable std::mutex error_mutex_;
     mutable std::string last_error_;
+    std::atomic<bool> connected_{false};
     std::atomic<bool> stopping_{true};
     std::thread heartbeat_thread_;
 };

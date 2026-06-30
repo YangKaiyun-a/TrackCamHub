@@ -51,7 +51,11 @@ public:
 
     int32_t OperInfoChanged(const SampleReg::GeneralOperInfo& info) override
     {
-        (void)info;
+        Logger::info("OperInfoChanged received, cmd=" + std::to_string(static_cast<int>(info.cmd)));
+        if (callbacks_->oper_changed)
+        {
+            callbacks_->oper_changed(info);
+        }
         return 0;
     }
 

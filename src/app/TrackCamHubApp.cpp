@@ -23,11 +23,15 @@ bool TrackCamHubApp::start(const std::string& config_path)
 
     camera_client_.configure(config_.camera);
     workflow_.configure(config_.camera, &camera_client_);
+    image_capture_worker_.configure(config_.camera, &camera_client_);
 
     HubServerCallbacks callbacks;
 #if TRACKCAMHUB_ENABLE_THRIFT
     callbacks.task_changed = [this](const auto& info) {
         workflow_.onTaskInfoChanged(info);
+    };
+    callbacks.oper_changed = [this](const auto& info) {
+        image_capture_worker_.handleOperInfoChanged(info);
     };
 #endif
 
@@ -38,6 +42,11 @@ bool TrackCamHubApp::start(const std::string& config_path)
 
     running_.store(true);
     camera_client_.startHeartbeat();
+    if (!image_capture_worker_.start())
+    {
+        stop();
+        return false;
+    }
 
     if (config_.track.enabled)
     {
@@ -65,6 +74,7 @@ void TrackCamHubApp::stop()
     }
 
     track_listener_.stop();
+    image_capture_worker_.stop();
     camera_client_.stopHeartbeat();
     hub_server_.stop();
     Logger::info("TrackCamHub stopped");

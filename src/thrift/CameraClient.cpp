@@ -7,6 +7,7 @@
 #endif
 
 #include <chrono>
+#include <utility>
 
 namespace trackcamhub
 {
@@ -19,11 +20,13 @@ CameraClient::~CameraClient()
 void CameraClient::configure(CameraConfig config)
 {
     config_ = std::move(config);
+    connected_.store(false);
 }
 
 bool CameraClient::startHeartbeat()
 {
     stopHeartbeat();
+    connected_.store(false);
     stopping_.store(false);
     heartbeat_thread_ = std::thread([this] { heartbeatLoop(); });
     return true;
@@ -32,10 +35,16 @@ bool CameraClient::startHeartbeat()
 void CameraClient::stopHeartbeat()
 {
     stopping_.store(true);
+    connected_.store(false);
     if (heartbeat_thread_.joinable())
     {
         heartbeat_thread_.join();
     }
+}
+
+bool CameraClient::isConnected() const
+{
+    return connected_.load();
 }
 
 bool CameraClient::sendHeartbeatOnce()
@@ -51,11 +60,11 @@ bool CameraClient::sendHeartbeatOnce()
 
     if (!ok)
     {
-        last_error_ = client.error();
+        setLastError(client.error());
     }
     return ok;
 #else
-    last_error_ = "TrackCamHub was built without Thrift support.";
+    setLastError("TrackCamHub was built without Thrift support.");
     return false;
 #endif
 }
@@ -80,26 +89,64 @@ bool CameraClient::distributeCaptureTask(const std::string& task_id)
 
     if (!ok)
     {
-        last_error_ = client.error();
+        setLastError(client.error());
         return false;
     }
 
     if (ret != 0)
     {
-        last_error_ = "DistributeTask returned " + std::to_string(ret);
+        setLastError("DistributeTask returned " + std::to_string(ret));
         return false;
     }
 
     return true;
 #else
-    last_error_ = "TrackCamHub was built without Thrift support.";
+    setLastError("TrackCamHub was built without Thrift support.");
+    return false;
+#endif
+}
+
+bool CameraClient::requestCameraImage()
+{
+#if TRACKCAMHUB_ENABLE_THRIFT
+    SampleReg::GeneralOperInfo info;
+    info.__set_cmd(SampleReg::GeneralOperCmd::GetCameraImage);
+
+    ThriftClient<SampleReg::SampleRegLCClient> client;
+    int32_t ret = -1;
+    const bool ok = client.call(config_.host, config_.port, [&](auto& stub) {
+        ret = stub.DistributeOper(info);
+    });
+
+    if (!ok)
+    {
+        setLastError(client.error());
+        return false;
+    }
+
+    if (ret != 0)
+    {
+        setLastError("DistributeOper(GetCameraImage) returned " + std::to_string(ret));
+        return false;
+    }
+
+    return true;
+#else
+    setLastError("TrackCamHub was built without Thrift support.");
     return false;
 #endif
 }
 
 std::string CameraClient::lastError() const
 {
+    std::lock_guard<std::mutex> lock(error_mutex_);
     return last_error_;
+}
+
+void CameraClient::setLastError(std::string error)
+{
+    std::lock_guard<std::mutex> lock(error_mutex_);
+    last_error_ = std::move(error);
 }
 
 void CameraClient::heartbeatLoop()
@@ -111,6 +158,7 @@ void CameraClient::heartbeatLoop()
     {
         if (sendHeartbeatOnce())
         {
+            connected_.store(true);
             if (!ever_connected)
             {
                 Logger::info("camera heartbeat connected: " + config_.host + ":" + std::to_string(config_.port));
@@ -124,6 +172,7 @@ void CameraClient::heartbeatLoop()
             Logger::warn("camera heartbeat failed: " + lastError());
             if (fail_count >= config_.heartbeat_fail_max)
             {
+                connected_.store(false);
                 Logger::error("camera heartbeat lost: " + config_.id);
             }
         }

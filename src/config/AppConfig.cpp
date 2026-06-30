@@ -100,6 +100,15 @@ AppConfig AppConfigLoader::load(const std::string& path)
     config.camera.heartbeat_fail_max = toInt(values, "camera.heartbeat_fail_max", config.camera.heartbeat_fail_max);
     config.camera.capture_timeout_ms = toInt(values, "camera.capture_timeout_ms", config.camera.capture_timeout_ms);
     config.camera.poll_interval_ms = toInt(values, "camera.poll_interval_ms", config.camera.poll_interval_ms);
+    config.camera.image_capture_enabled = toBool(toString(values,
+                                                          "camera.image_capture_enabled",
+                                                          config.camera.image_capture_enabled ? "true" : "false"));
+    config.camera.image_capture_interval_ms = toInt(values,
+                                                    "camera.image_capture_interval_ms",
+                                                    config.camera.image_capture_interval_ms);
+    config.camera.image_capture_dir = toString(values,
+                                               "camera.image_capture_dir",
+                                               config.camera.image_capture_dir);
 
     return config;
 }

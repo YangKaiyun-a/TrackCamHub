@@ -23,6 +23,9 @@ struct CameraConfig
     int heartbeat_fail_max = 3;
     int capture_timeout_ms = 15000;
     int poll_interval_ms = 200;
+    bool image_capture_enabled = false;
+    int image_capture_interval_ms = 100;
+    std::string image_capture_dir = "camera_images";
 };
 
 struct HubConfig

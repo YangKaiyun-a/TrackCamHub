@@ -4,6 +4,7 @@
 #include "serial/TrackSignalListener.h"
 #include "thrift/CameraClient.h"
 #include "thrift/HubServer.h"
+#include "workflow/CameraImageCaptureWorker.h"
 #include "workflow/CaptureWorkflow.h"
 
 #include <atomic>
@@ -25,9 +26,9 @@ private:
     CameraClient camera_client_;
     HubServer hub_server_;
     CaptureWorkflow workflow_;
+    CameraImageCaptureWorker image_capture_worker_;
     TrackSignalListener track_listener_;
     std::atomic<bool> running_{false};
 };
 
 } // namespace trackcamhub
-

@@ -36,6 +36,24 @@ TrackCamHub.exe --service C:\TrackCamHub\config\trackcamhub.ini
 
 The service mode must be launched by the Windows Service Control Manager. Use the packaged `install_service.bat` script instead of starting `--service` manually from a console.
 
+## Camera Image Capture
+
+TrackCamHub can periodically request the current camera image through `SampleRegLC::DistributeOper(GetCameraImage)`. The image data is received from the camera through the `SampleRegUC::OperInfoChanged` callback.
+
+Enable it in `config/trackcamhub.ini`:
+
+```ini
+camera.image_capture_enabled=true
+camera.image_capture_interval_ms=100
+camera.image_capture_dir=camera_images
+```
+
+Saved files use formats that do not require extra libraries:
+
+- grayscale image data is saved as `.pgm`
+- BGR image data is converted to RGB and saved as `.ppm`
+- unsupported byte counts are saved as `.bin`
+
 ## Package
 
 From a Visual Studio Developer PowerShell or another shell where MSVC and Ninja are available:

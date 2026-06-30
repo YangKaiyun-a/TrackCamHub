@@ -17,6 +17,7 @@ namespace trackcamhub
 struct HubServerCallbacks
 {
     std::function<void(const SampleReg::TaskInfo&)> task_changed;
+    std::function<void(const SampleReg::GeneralOperInfo&)> oper_changed;
 };
 #else
 struct HubServerCallbacks
