@@ -27,8 +27,6 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
 
     if (info.state != SampleReg::TaskState::Finished)
     {
-        Logger::debug("skip non-finished TaskInfoChanged, taskId=" + info.taskId +
-                      ", state=" + std::to_string(static_cast<int>(info.state)));
         return;
     }
 

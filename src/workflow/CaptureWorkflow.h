@@ -5,6 +5,7 @@
 #include "thrift/CameraClient.h"
 
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -37,7 +38,7 @@ public:
     WorkflowState state() const;
 
 private:
-    std::string makeTaskId(const TrackSampleEvent& event) const;
+    std::string makeTaskId(const TrackSampleEvent& event);
     bool waitForResult(const std::string& task_id);
 
     CameraConfig config_;
@@ -49,6 +50,7 @@ private:
     std::string current_task_id_;
     bool current_finished_ = false;
     std::optional<int> current_ret_code_;
+    std::uint64_t next_task_index_ = 0;
 };
 
 } // namespace trackcamhub

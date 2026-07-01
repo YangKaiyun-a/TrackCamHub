@@ -3,6 +3,7 @@
 #include "app/Logger.h"
 
 #include <chrono>
+#include <iomanip>
 #include <sstream>
 
 namespace trackcamhub
@@ -22,7 +23,7 @@ void CaptureWorkflow::onTrackSampleReady(const TrackSampleEvent& event)
         return;
     }
 
-    const auto task_id = makeTaskId(event);
+    std::string task_id;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (state_ != WorkflowState::Idle)
@@ -30,6 +31,7 @@ void CaptureWorkflow::onTrackSampleReady(const TrackSampleEvent& event)
             Logger::warn("drop sample-ready event while workflow is busy, raw=" + event.raw_message);
             return;
         }
+        task_id = makeTaskId(event);
         state_ = WorkflowState::Dispatching;
         current_task_id_ = task_id;
         current_finished_ = false;
@@ -78,7 +80,6 @@ void CaptureWorkflow::onTaskInfoChanged(const SampleReg::TaskInfo& info)
     if (info.state == SampleReg::TaskState::Finished)
     {
         current_finished_ = true;
-        Logger::info("capture task finished by callback: " + info.taskId);
         cv_.notify_all();
     }
 }
@@ -90,10 +91,13 @@ WorkflowState CaptureWorkflow::state() const
     return state_;
 }
 
-std::string CaptureWorkflow::makeTaskId(const TrackSampleEvent& event) const
+std::string CaptureWorkflow::makeTaskId(const TrackSampleEvent& event)
 {
+    ++next_task_index_;
+
     std::ostringstream stream;
-    stream << "TCH-" << event.sample_id;
+    stream << "TCH-" << event.sample_id << "-N"
+           << std::setw(6) << std::setfill('0') << next_task_index_;
     return stream.str();
 }
 
@@ -108,8 +112,6 @@ bool CaptureWorkflow::waitForResult(const std::string& task_id)
     if (callback_done)
     {
         const bool ok = current_ret_code_.value_or(-1) == 0;
-        Logger::info("capture task callback result taskId=" + task_id + ", retCode=" +
-                     std::to_string(current_ret_code_.value_or(-1)));
         return ok;
     }
 
