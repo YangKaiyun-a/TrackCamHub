@@ -10,3 +10,5 @@ messages.txt
 dist/
 
 tools/__pycache__/
+
+camera_images/

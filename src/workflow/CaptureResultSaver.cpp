@@ -25,6 +25,13 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
         return;
     }
 
+    if (info.state != SampleReg::TaskState::Finished)
+    {
+        Logger::debug("skip non-finished TaskInfoChanged, taskId=" + info.taskId +
+                      ", state=" + std::to_string(static_cast<int>(info.state)));
+        return;
+    }
+
     const auto paths = makeTimestampPaths();
     std::error_code ec;
     std::filesystem::create_directories(paths.directory, ec);
@@ -35,9 +42,9 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
     }
 
     std::vector<std::string> image_files;
-    if (!saveImages(info, paths, image_files))
+    if (!saveResultImages(info, paths, image_files))
     {
-        Logger::warn("TaskInfoChanged contains no supported imageOut data, taskId=" + info.taskId);
+        Logger::warn("TaskInfoChanged contains no supported result image data, taskId=" + info.taskId);
     }
 
     if (!saveMetadata(info, paths, image_files))
@@ -58,36 +65,42 @@ CaptureResultSaver::TimestampPaths CaptureResultSaver::makeTimestampPaths() cons
     localtime_r(&time, &tm);
 #endif
 
-    std::ostringstream date;
-    date << std::put_time(&tm, "%Y%m%d");
+    std::ostringstream directory_name;
+    directory_name << std::put_time(&tm, "%Y%m%d_%H_%M_%S");
 
-    std::ostringstream base_name;
-    base_name << date.str() << '_' << std::put_time(&tm, "%H_%M_%S");
-
-    return TimestampPaths{output_root_ / date.str(), base_name.str()};
+    return TimestampPaths{output_root_ / directory_name.str()};
 }
 
-bool CaptureResultSaver::saveImages(const SampleReg::TaskInfo& info,
-                                    const TimestampPaths& paths,
-                                    std::vector<std::string>& image_files) const
+bool CaptureResultSaver::saveResultImages(const SampleReg::TaskInfo& info,
+                                          const TimestampPaths& paths,
+                                          std::vector<std::string>& image_files) const
 {
-    if (!info.__isset.imageOut || info.imageOut.empty())
+    if (!info.__isset.result)
     {
         return false;
     }
 
     bool saved_any = false;
-    for (std::size_t i = 0; i < info.imageOut.size(); ++i)
+    if (info.result.__isset.bestBarcodeImage &&
+        info.result.bestBarcodeImage.__isset.bestBarcodeImage)
     {
-        std::ostringstream suffix;
-        if (info.imageOut.size() > 1)
-        {
-            suffix << '_' << i;
-        }
-
-        const auto path_base = paths.directory / (paths.base_name + suffix.str());
         std::string saved_filename;
-        if (saveImage(info.imageOut[i], path_base, saved_filename))
+        if (saveImage(info.result.bestBarcodeImage.bestBarcodeImage,
+                      paths.directory / "best_barcode_image",
+                      saved_filename))
+        {
+            image_files.push_back(saved_filename);
+            saved_any = true;
+        }
+    }
+
+    if (info.result.__isset.bestLiquidImage &&
+        info.result.bestLiquidImage.__isset.bestLiquidImage)
+    {
+        std::string saved_filename;
+        if (saveImage(info.result.bestLiquidImage.bestLiquidImage,
+                      paths.directory / "best_liquid_image",
+                      saved_filename))
         {
             image_files.push_back(saved_filename);
             saved_any = true;
@@ -196,15 +209,12 @@ bool CaptureResultSaver::saveMetadata(const SampleReg::TaskInfo& info,
                                       const TimestampPaths& paths,
                                       const std::vector<std::string>& image_files) const
 {
-    const auto path = paths.directory / (paths.base_name + ".json");
+    const auto path = paths.directory / "result.json";
     std::ofstream output(path);
     if (!output)
     {
         return false;
     }
-
-    std::ostringstream result_text;
-    result_text << info.result;
 
     output << "{\n";
     output << "  \"taskId\": \"" << jsonEscape(info.taskId) << "\",\n";
@@ -222,8 +232,10 @@ bool CaptureResultSaver::saveMetadata(const SampleReg::TaskInfo& info,
         output << '"' << jsonEscape(image_files[i]) << '"';
     }
     output << "],\n";
-    output << "  \"resultFlags\": " << resultFlagsJson(info.result) << ",\n";
-    output << "  \"resultText\": \"" << jsonEscape(result_text.str()) << "\"\n";
+    output << "  \"resultFlags\": "
+           << (info.__isset.result ? resultFlagsJson(info.result) : "{}") << ",\n";
+    output << "  \"resultText\": \""
+           << (info.__isset.result ? jsonEscape(resultTextWithoutImages(info.result)) : "") << "\"\n";
     output << "}\n";
 
     Logger::info("saved capture metadata: " + path.string());
@@ -253,6 +265,17 @@ std::string CaptureResultSaver::resultFlagsJson(const SampleReg::TaskResult& res
     json << "\"tubeOverHeadColor\":" << (result.__isset.tubeOverHeadColor ? "true" : "false");
     json << "}";
     return json.str();
+}
+
+std::string CaptureResultSaver::resultTextWithoutImages(const SampleReg::TaskResult& result) const
+{
+    auto filtered = result;
+    filtered.__isset.bestBarcodeImage = false;
+    filtered.__isset.bestLiquidImage = false;
+
+    std::ostringstream text;
+    text << filtered;
+    return text.str();
 }
 
 std::string CaptureResultSaver::jsonEscape(const std::string& value)

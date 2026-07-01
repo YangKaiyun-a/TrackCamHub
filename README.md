@@ -38,11 +38,12 @@ The service mode must be launched by the Windows Service Control Manager. Use th
 
 ## Capture Result Saving
 
-TrackCamHub can save images and task results returned by the camera after a capture task finishes. The flow is:
+TrackCamHub can save the selected result images and task result returned by the camera after a capture task finishes. The flow is:
 
 1. The track serial signal triggers `SampleRegLC::DistributeTask`.
 2. The camera finishes capture and calls `SampleRegUC::TaskInfoChanged`.
-3. TrackCamHub saves `TaskInfo.imageOut` and `TaskInfo.result`.
+3. TrackCamHub saves `TaskInfo.result.bestBarcodeImage.bestBarcodeImage`,
+   `TaskInfo.result.bestLiquidImage.bestLiquidImage`, and `result.json`.
 
 Enable saving in `config/trackcamhub.ini`:
 
@@ -53,14 +54,15 @@ camera.image_capture_enabled=true
 Files are saved under:
 
 ```text
-camera_images\YYYYMMDD
+camera_images\YYYYMMDD_HH_MM_SS
 ```
 
 with names such as:
 
 ```text
-20260701_14_30_05.ppm
-20260701_14_30_05.json
+best_barcode_image.ppm
+best_liquid_image.ppm
+result.json
 ```
 
 Image formats use encodings that do not require extra libraries:
@@ -69,7 +71,7 @@ Image formats use encodings that do not require extra libraries:
 - BGR image data is converted to RGB and saved as `.ppm`
 - unsupported byte counts are saved as `.bin`
 
-The `.json` file stores task metadata, saved image filenames, and a text representation of `TaskInfo.result`.
+The `result.json` file stores task metadata, saved image filenames, `resultFlags`, and `resultText`. The two selected image fields are saved as image files and are filtered out of `resultText` to avoid duplicating image data in JSON.
 
 ## Package
 

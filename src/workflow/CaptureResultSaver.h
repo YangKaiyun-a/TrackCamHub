@@ -25,13 +25,12 @@ private:
     struct TimestampPaths
     {
         std::filesystem::path directory;
-        std::string base_name;
     };
 
     TimestampPaths makeTimestampPaths() const;
-    bool saveImages(const SampleReg::TaskInfo& info,
-                    const TimestampPaths& paths,
-                    std::vector<std::string>& image_files) const;
+    bool saveResultImages(const SampleReg::TaskInfo& info,
+                          const TimestampPaths& paths,
+                          std::vector<std::string>& image_files) const;
     bool saveImage(const SampleReg::ImageInfo& image,
                    const std::filesystem::path& path_base,
                    std::string& saved_filename) const;
@@ -48,6 +47,7 @@ private:
                       const TimestampPaths& paths,
                       const std::vector<std::string>& image_files) const;
     std::string resultFlagsJson(const SampleReg::TaskResult& result) const;
+    std::string resultTextWithoutImages(const SampleReg::TaskResult& result) const;
     static std::string jsonEscape(const std::string& value);
 #endif
 

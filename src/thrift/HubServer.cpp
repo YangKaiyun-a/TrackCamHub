@@ -41,7 +41,10 @@ public:
 
     int32_t TaskInfoChanged(const SampleReg::TaskInfo& info) override
     {
-        Logger::info("TaskInfoChanged received, taskId=" + info.taskId);
+        Logger::info("TaskInfoChanged received, taskId=" + info.taskId +
+                     ", state=" + std::to_string(static_cast<int>(info.state)) +
+                     ", retCode=" + (info.__isset.retCode ? std::to_string(info.retCode) : "unset") +
+                     ", result=" + (info.__isset.result ? "set" : "unset"));
         if (callbacks_->task_changed)
         {
             callbacks_->task_changed(info);
