@@ -3,8 +3,31 @@
 #include "app/Logger.h"
 #include "config/AppConfig.h"
 
+#include <filesystem>
+
 namespace trackcamhub
 {
+namespace
+{
+
+std::filesystem::path appRootFromConfigPath(const std::string& config_path)
+{
+    std::filesystem::path path(config_path);
+    if (path.is_relative())
+    {
+        path = std::filesystem::current_path() / path;
+    }
+
+    const auto config_dir = path.parent_path();
+    if (config_dir.filename() == "config")
+    {
+        return config_dir.parent_path();
+    }
+
+    return config_dir.empty() ? std::filesystem::current_path() : config_dir;
+}
+
+} // namespace
 
 TrackCamHubApp::~TrackCamHubApp()
 {
@@ -23,15 +46,14 @@ bool TrackCamHubApp::start(const std::string& config_path)
 
     camera_client_.configure(config_.camera);
     workflow_.configure(config_.camera, &camera_client_);
-    image_capture_worker_.configure(config_.camera, &camera_client_);
+    capture_result_saver_.configure(config_.camera.image_capture_enabled,
+                                    appRootFromConfigPath(config_path) / "camera_images");
 
     HubServerCallbacks callbacks;
 #if TRACKCAMHUB_ENABLE_THRIFT
     callbacks.task_changed = [this](const auto& info) {
+        capture_result_saver_.saveTaskInfo(info);
         workflow_.onTaskInfoChanged(info);
-    };
-    callbacks.oper_changed = [this](const auto& info) {
-        image_capture_worker_.handleOperInfoChanged(info);
     };
 #endif
 
@@ -42,11 +64,6 @@ bool TrackCamHubApp::start(const std::string& config_path)
 
     running_.store(true);
     camera_client_.startHeartbeat();
-    if (!image_capture_worker_.start())
-    {
-        stop();
-        return false;
-    }
 
     if (config_.track.enabled)
     {
@@ -74,7 +91,6 @@ void TrackCamHubApp::stop()
     }
 
     track_listener_.stop();
-    image_capture_worker_.stop();
     camera_client_.stopHeartbeat();
     hub_server_.stop();
     Logger::info("TrackCamHub stopped");

@@ -36,23 +36,40 @@ TrackCamHub.exe --service C:\TrackCamHub\config\trackcamhub.ini
 
 The service mode must be launched by the Windows Service Control Manager. Use the packaged `install_service.bat` script instead of starting `--service` manually from a console.
 
-## Camera Image Capture
+## Capture Result Saving
 
-TrackCamHub can periodically request the current camera image through `SampleRegLC::DistributeOper(GetCameraImage)`. The image data is received from the camera through the `SampleRegUC::OperInfoChanged` callback.
+TrackCamHub can save images and task results returned by the camera after a capture task finishes. The flow is:
 
-Enable it in `config/trackcamhub.ini`:
+1. The track serial signal triggers `SampleRegLC::DistributeTask`.
+2. The camera finishes capture and calls `SampleRegUC::TaskInfoChanged`.
+3. TrackCamHub saves `TaskInfo.imageOut` and `TaskInfo.result`.
+
+Enable saving in `config/trackcamhub.ini`:
 
 ```ini
 camera.image_capture_enabled=true
-camera.image_capture_interval_ms=100
-camera.image_capture_dir=camera_images
 ```
 
-Saved files use formats that do not require extra libraries:
+Files are saved under:
+
+```text
+camera_images\YYYYMMDD
+```
+
+with names such as:
+
+```text
+20260701_14_30_05.ppm
+20260701_14_30_05.json
+```
+
+Image formats use encodings that do not require extra libraries:
 
 - grayscale image data is saved as `.pgm`
 - BGR image data is converted to RGB and saved as `.ppm`
 - unsupported byte counts are saved as `.bin`
+
+The `.json` file stores task metadata, saved image filenames, and a text representation of `TaskInfo.result`.
 
 ## Package
 

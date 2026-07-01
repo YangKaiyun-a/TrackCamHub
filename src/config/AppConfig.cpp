@@ -103,12 +103,6 @@ AppConfig AppConfigLoader::load(const std::string& path)
     config.camera.image_capture_enabled = toBool(toString(values,
                                                           "camera.image_capture_enabled",
                                                           config.camera.image_capture_enabled ? "true" : "false"));
-    config.camera.image_capture_interval_ms = toInt(values,
-                                                    "camera.image_capture_interval_ms",
-                                                    config.camera.image_capture_interval_ms);
-    config.camera.image_capture_dir = toString(values,
-                                               "camera.image_capture_dir",
-                                               config.camera.image_capture_dir);
 
     return config;
 }
