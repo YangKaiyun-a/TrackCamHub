@@ -142,6 +142,12 @@ bool CaptureResultSaver::saveImage(const SampleReg::ImageInfo& image,
         return false;
     }
 
+    Logger::warn("capture image byte size does not match raw gray/BGR layout, width=" +
+                 std::to_string(image.width) + ", height=" + std::to_string(image.height) +
+                 ", dataBytes=" + std::to_string(image.data.size()) +
+                 ", grayExpected=" + std::to_string(gray_size) +
+                 ", bgrExpected=" + std::to_string(bgr_size));
+
     const auto path = std::filesystem::path(path_base.string() + ".bin");
     if (saveRawImage(path, image.data))
     {
