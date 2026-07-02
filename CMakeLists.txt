@@ -79,3 +79,11 @@ if (TRACKCAMHUB_ENABLE_THRIFT)
         VERBATIM
     )
 endif()
+
+if (WIN32)
+    add_executable(TriggerCapture
+        tools/TriggerCapture.cpp
+    )
+    target_compile_definitions(TriggerCapture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(TriggerCapture PRIVATE ws2_32)
+endif()

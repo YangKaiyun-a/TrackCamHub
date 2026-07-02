@@ -103,6 +103,11 @@ AppConfig AppConfigLoader::load(const std::string& path)
     config.camera.image_capture_enabled = toBool(toString(values,
                                                           "camera.image_capture_enabled",
                                                           config.camera.image_capture_enabled ? "true" : "false"));
+    config.direct_trigger.enabled = toBool(toString(values,
+                                                    "direct_trigger.enabled",
+                                                    config.direct_trigger.enabled ? "true" : "false"));
+    config.direct_trigger.host = toString(values, "direct_trigger.host", config.direct_trigger.host);
+    config.direct_trigger.port = toInt(values, "direct_trigger.port", config.direct_trigger.port);
 
     return config;
 }

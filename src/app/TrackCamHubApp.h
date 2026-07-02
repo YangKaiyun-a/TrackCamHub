@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/AppConfig.h"
+#include "control/DirectTriggerServer.h"
 #include "serial/TrackSignalListener.h"
 #include "thrift/CameraClient.h"
 #include "thrift/HubServer.h"
@@ -25,6 +26,7 @@ private:
     AppConfig config_;
     CameraClient camera_client_;
     HubServer hub_server_;
+    DirectTriggerServer direct_trigger_server_;
     CaptureWorkflow workflow_;
     CaptureResultSaver capture_result_saver_;
     TrackSignalListener track_listener_;

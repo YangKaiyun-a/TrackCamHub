@@ -38,6 +38,9 @@ New-Item -ItemType Directory -Force -Path (Join-Path $OutputPath "docs") | Out-N
 New-Item -ItemType Directory -Force -Path (Join-Path $OutputPath "logs") | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $BuildPath "TrackCamHub.exe") -Destination $OutputPath
+if (Test-Path -LiteralPath (Join-Path $BuildPath "TriggerCapture.exe")) {
+    Copy-Item -LiteralPath (Join-Path $BuildPath "TriggerCapture.exe") -Destination $OutputPath
+}
 Copy-Item -Path (Join-Path $BuildPath "*.dll") -Destination $OutputPath -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath (Join-Path $RepoRoot "config\trackcamhub.ini") -Destination (Join-Path $OutputPath "config")
 Copy-Item -LiteralPath (Join-Path $RepoRoot "README.md") -Destination $OutputPath

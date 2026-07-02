@@ -65,12 +65,21 @@ bool TrackCamHubApp::start(const std::string& config_path)
     running_.store(true);
     camera_client_.startHeartbeat();
 
+    if (!direct_trigger_server_.start(config_.direct_trigger, [this](const TrackSampleEvent& event) {
+            workflow_.onTrackSampleReady(event);
+        }))
+    {
+        stop();
+        return false;
+    }
+
     if (config_.track.enabled)
     {
         if (!track_listener_.start(config_.track, [this](const TrackSampleEvent& event) {
                 workflow_.onTrackSampleReady(event);
             }))
         {
+            
             stop();
             return false;
         }
@@ -91,6 +100,7 @@ void TrackCamHubApp::stop()
     }
 
     track_listener_.stop();
+    direct_trigger_server_.stop();
     camera_client_.stopHeartbeat();
     hub_server_.stop();
     Logger::info("TrackCamHub stopped");

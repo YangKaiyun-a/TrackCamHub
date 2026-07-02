@@ -31,11 +31,19 @@ struct HubConfig
     int uc_server_port = 9091;
 };
 
+struct DirectTriggerConfig
+{
+    bool enabled = false;
+    std::string host = "127.0.0.1";
+    int port = 7090;
+};
+
 struct AppConfig
 {
     HubConfig hub;
     TrackSerialConfig track;
     CameraConfig camera;
+    DirectTriggerConfig direct_trigger;
 };
 
 class AppConfigLoader

@@ -73,6 +73,31 @@ Image formats use encodings that do not require extra libraries:
 
 The `result.json` file stores task metadata, saved image filenames, `resultFlags`, and `resultText`. The two selected image fields are saved as image files and are filtered out of `resultText` to avoid duplicating image data in JSON.
 
+## Direct Capture Trigger
+
+TrackCamHub can trigger a capture task without a serial device. Enable the local TCP trigger in `config/trackcamhub.ini`:
+
+```ini
+track.serial_enabled=false
+direct_trigger.enabled=true
+direct_trigger.host=127.0.0.1
+direct_trigger.port=7090
+```
+
+Start TrackCamHub, then run:
+
+```bat
+trigger_capture.bat
+```
+
+or call the trigger client directly:
+
+```bat
+TriggerCapture.exe --host 127.0.0.1 --port 7090 --message CAPTURE
+```
+
+External programs can also open a TCP connection to `127.0.0.1:7090` and send one line of text. Each accepted request reuses the same capture workflow as the serial trigger.
+
 ## Package
 
 From a Visual Studio Developer PowerShell or another shell where MSVC and Ninja are available:
