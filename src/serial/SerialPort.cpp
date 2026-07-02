@@ -137,10 +137,39 @@ bool SerialPort::readByte(char& value)
 #endif
 }
 
+bool SerialPort::writeBytes(const std::vector<std::uint8_t>& bytes)
+{
+#ifdef _WIN32
+    if (!isOpen())
+    {
+        last_error_ = "serial port is not open";
+        return false;
+    }
+
+    DWORD bytes_written = 0;
+    if (!WriteFile(handle_, bytes.data(), static_cast<DWORD>(bytes.size()), &bytes_written, nullptr))
+    {
+        last_error_ = "WriteFile failed: " + windowsErrorMessage(GetLastError());
+        return false;
+    }
+
+    if (bytes_written != bytes.size())
+    {
+        last_error_ = "WriteFile wrote partial data";
+        return false;
+    }
+
+    FlushFileBuffers(handle_);
+    return true;
+#else
+    (void)bytes;
+    return false;
+#endif
+}
+
 std::string SerialPort::lastError() const
 {
     return last_error_;
 }
 
 } // namespace trackcamhub
-

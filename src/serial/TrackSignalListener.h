@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -40,6 +41,7 @@ private:
     TrackSerialConfig config_;
     Callback callback_;
     SerialPort serial_;
+    std::optional<TrackSampleEvent> pending_event_;
     std::atomic<bool> stopping_{true};
     std::thread worker_;
 };

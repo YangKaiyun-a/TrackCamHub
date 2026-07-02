@@ -32,6 +32,7 @@ public:
     void close();
     bool isOpen() const;
     bool readByte(char& value);
+    bool writeBytes(const std::vector<std::uint8_t>& bytes);
     std::string lastError() const;
 
 private:

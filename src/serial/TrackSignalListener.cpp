@@ -18,6 +18,9 @@ constexpr std::uint8_t kEscape = 0x1B;
 constexpr std::uint8_t kEscapeHead = 0xEA;
 constexpr std::uint8_t kEscapeTail = 0xEB;
 constexpr std::uint8_t kEscapeEscape = 0x00;
+constexpr std::uint8_t kCameraAckCommand = 0x00;
+constexpr std::uint8_t kRotationSuccessCommand = 0x2C;
+constexpr std::uint8_t kRotationFailureCommand = 0x29;
 
 std::string toHex(const std::vector<std::uint8_t>& bytes)
 {
@@ -42,6 +45,50 @@ std::uint8_t checksum(const std::vector<std::uint8_t>& bytes, std::size_t count)
         sum = static_cast<std::uint8_t>(sum + bytes[i]);
     }
     return sum;
+}
+
+void appendEscaped(std::vector<std::uint8_t>& output, std::uint8_t byte)
+{
+    if (byte == kFrameHead)
+    {
+        output.push_back(kEscape);
+        output.push_back(kEscapeHead);
+    }
+    else if (byte == kFrameTail)
+    {
+        output.push_back(kEscape);
+        output.push_back(kEscapeTail);
+    }
+    else if (byte == kEscape)
+    {
+        output.push_back(kEscape);
+        output.push_back(kEscapeEscape);
+    }
+    else
+    {
+        output.push_back(byte);
+    }
+}
+
+std::vector<std::uint8_t> buildFrame(std::uint16_t sequence,
+                                     std::uint8_t gripper_id,
+                                     std::uint8_t command)
+{
+    std::vector<std::uint8_t> body;
+    body.push_back(static_cast<std::uint8_t>((sequence >> 8U) & 0xFFU));
+    body.push_back(static_cast<std::uint8_t>(sequence & 0xFFU));
+    body.push_back(gripper_id);
+    body.push_back(command);
+    body.push_back(checksum(body, body.size()));
+
+    std::vector<std::uint8_t> frame;
+    frame.push_back(kFrameHead);
+    for (const auto byte : body)
+    {
+        appendEscaped(frame, byte);
+    }
+    frame.push_back(kFrameTail);
+    return frame;
 }
 
 } // namespace
@@ -185,8 +232,46 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     const std::uint8_t command = frame[3];
 
     Logger::debug("track serial frame: " + toHex(frame));
+    if (command == kRotationSuccessCommand)
+    {
+        Logger::info("track rotation completed, sequence=" + std::to_string(sequence) +
+                     ", gripper=" + std::to_string(gripper_id));
+        if (!pending_event_)
+        {
+            Logger::warn("ignore rotation success without pending capture event");
+            return;
+        }
+
+        auto event = *pending_event_;
+        pending_event_.reset();
+        if (callback_)
+        {
+            callback_(event);
+        }
+        return;
+    }
+
+    if (command == kRotationFailureCommand)
+    {
+        Logger::warn("track rotation failed, sequence=" + std::to_string(sequence) +
+                     ", gripper=" + std::to_string(gripper_id));
+        pending_event_.reset();
+        return;
+    }
+
     if (command != static_cast<std::uint8_t>(config_.ready_command))
     {
+        return;
+    }
+
+    const auto reply = buildFrame(sequence, gripper_id, kCameraAckCommand);
+    if (serial_.writeBytes(reply))
+    {
+        Logger::info("track serial reply sent: " + toHex(reply));
+    }
+    else
+    {
+        Logger::error("track serial reply failed: " + serial_.lastError());
         return;
     }
 
@@ -197,10 +282,13 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     event.gripper_id = gripper_id;
     event.command = command;
 
-    if (callback_)
+    if (pending_event_)
     {
-        callback_(event);
+        Logger::warn("replace pending capture event before rotation result, old=" + pending_event_->sample_id +
+                     ", new=" + event.sample_id);
     }
+    pending_event_ = event;
+    Logger::info("track capture event pending until rotation success: " + event.sample_id);
 }
 
 } // namespace trackcamhub

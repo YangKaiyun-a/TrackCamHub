@@ -96,7 +96,26 @@ or call the trigger client directly:
 TriggerCapture.exe --host 127.0.0.1 --port 7090 --message CAPTURE
 ```
 
-External programs can also open a TCP connection to `127.0.0.1:7090` and send one line of text. Each accepted request reuses the same capture workflow as the serial trigger.
+External programs can also open a TCP connection to `127.0.0.1:7090` and send one line of text. Each accepted request triggers the camera capture workflow directly and does not wait for the serial rotation-success frame.
+
+## Serial Rotation Handshake
+
+When the serial listener is enabled, TrackCamHub waits for the rotation-success frame before dispatching the camera task:
+
+```ini
+track.serial_enabled=true
+track.ready_command=0x00
+```
+
+Flow:
+
+1. Lower controller sends `track.ready_command`.
+2. TrackCamHub replies `0x00` on the same serial port and stores the pending capture event.
+3. Lower controller rotates the sample base.
+4. Lower controller sends `0x2c` when rotation succeeds.
+5. TrackCamHub dispatches the camera capture task.
+
+If the lower controller sends `0x29`, TrackCamHub logs rotation failure and drops the pending capture event.
 
 ## Package
 
