@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace trackcamhub
 {
@@ -26,7 +27,7 @@ struct CameraConfig
     bool image_capture_enabled = false;
 };
 
-struct HubConfig
+struct ThriftServerConfig
 {
     int uc_server_port = 9091;
 };
@@ -40,10 +41,10 @@ struct DirectTriggerConfig
 
 struct AppConfig
 {
-    HubConfig hub;
-    TrackSerialConfig track;
-    CameraConfig camera;
+    ThriftServerConfig hub;
     DirectTriggerConfig direct_trigger;
+    std::vector<CameraConfig> cameras;
+    std::vector<TrackSerialConfig> tracks;
 };
 
 class AppConfigLoader

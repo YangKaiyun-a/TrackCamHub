@@ -70,6 +70,7 @@ bool CameraClient::distributeCaptureTask(const std::string& task_id)
     task.__set_taskType({
         SampleReg::TaskType::TASK_GET_BARCODE,
         SampleReg::TaskType::TASK_GET_BEST_BARCODE_IMAGE,
+        SampleReg::TaskType::TASK_GET_BEST_LIQUID_IMAGE,
     });
     task.__set_state(SampleReg::TaskState::Issued);
 

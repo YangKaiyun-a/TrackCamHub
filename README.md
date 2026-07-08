@@ -48,13 +48,14 @@ TrackCamHub can save the selected result images and task result returned by the 
 Enable saving in `config/trackcamhub.ini`:
 
 ```ini
-camera.image_capture_enabled=true
+camera.camera-1.image_capture_enabled=true
+camera.camera-2.image_capture_enabled=true
 ```
 
 Files are saved under:
 
 ```text
-camera_images\YYYYMMDD_HH_MM_SS
+camera_images\<camera-id>\YYYYMMDD_HH_MM_SS
 ```
 
 with names such as:
@@ -73,12 +74,30 @@ Image formats use encodings that do not require extra libraries:
 
 The `result.json` file stores task metadata, saved image filenames, `resultFlags`, and `resultText`. The two selected image fields are saved as image files and are filtered out of `resultText` to avoid duplicating image data in JSON.
 
+For multiple cameras, bind each camera id to its own track serial port:
+
+```ini
+camera.ids=camera-1,camera-2
+
+camera.camera-1.host=172.30.1.111
+camera.camera-1.port=7082
+camera.camera-1.image_capture_enabled=true
+track.camera-1.serial_enabled=true
+track.camera-1.port=COM7
+
+camera.camera-2.host=172.30.1.112
+camera.camera-2.port=7082
+camera.camera-2.image_capture_enabled=true
+track.camera-2.serial_enabled=true
+track.camera-2.port=COM8
+```
+
 ## Direct Capture Trigger
 
 TrackCamHub can trigger a capture task without a serial device. Enable the local TCP trigger in `config/trackcamhub.ini`:
 
 ```ini
-track.serial_enabled=false
+track.camera-1.serial_enabled=false
 direct_trigger.enabled=true
 direct_trigger.host=127.0.0.1
 direct_trigger.port=7090
@@ -103,13 +122,13 @@ External programs can also open a TCP connection to `127.0.0.1:7090` and send on
 When the serial listener is enabled, TrackCamHub waits for the rotation-success frame before dispatching the camera task:
 
 ```ini
-track.serial_enabled=true
-track.ready_command=0x00
+track.camera-1.serial_enabled=true
+track.camera-1.ready_command=0x00
 ```
 
 Flow:
 
-1. Lower controller sends `track.ready_command`.
+1. Lower controller sends the configured ready command, for example `track.camera-1.ready_command`.
 2. TrackCamHub replies `0x00` on the same serial port and stores the pending capture event.
 3. Lower controller rotates the sample base.
 4. Lower controller sends `0x2c` when rotation succeeds.

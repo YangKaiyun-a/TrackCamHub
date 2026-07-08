@@ -14,9 +14,9 @@ namespace trackcamhub
 {
 
 #if TRACKCAMHUB_ENABLE_THRIFT
-struct HubServerCallbacks
+struct ThriftServerCallbacks
 {
-    std::function<void(const SampleReg::TaskInfo&)> task_changed;
+    std::function<void(const SampleReg::TaskInfo&)> task_changed;   // 收到 task_changed 时调用
 };
 #else
 struct HubServerCallbacks
@@ -24,16 +24,16 @@ struct HubServerCallbacks
 };
 #endif
 
-class HubServer
+class ThriftServer
 {
 public:
-    HubServer();
-    ~HubServer();
+    ThriftServer();
+    ~ThriftServer();
 
-    HubServer(const HubServer&) = delete;
-    HubServer& operator=(const HubServer&) = delete;
+    ThriftServer(const ThriftServer&) = delete;
+    ThriftServer& operator=(const ThriftServer&) = delete;
 
-    bool start(const HubConfig& config, HubServerCallbacks callbacks);
+    bool start(const ThriftServerConfig& config, ThriftServerCallbacks callbacks);
     void stop();
 
 private:

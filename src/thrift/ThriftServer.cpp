@@ -1,4 +1,4 @@
-#include "thrift/HubServer.h"
+#include "thrift/ThriftServer.h"
 
 #include "app/Logger.h"
 
@@ -23,7 +23,7 @@ namespace
 class SampleRegUCHandler final : public SampleReg::SampleRegUCIf
 {
 public:
-    explicit SampleRegUCHandler(std::shared_ptr<HubServerCallbacks> callbacks)
+    explicit SampleRegUCHandler(std::shared_ptr<ThriftServerCallbacks> callbacks)
         : callbacks_(std::move(callbacks))
     {
     }
@@ -64,13 +64,13 @@ public:
     }
 
 private:
-    std::shared_ptr<HubServerCallbacks> callbacks_;
+    std::shared_ptr<ThriftServerCallbacks> callbacks_;
 };
 
 class SampleRegUCHandlerFactory final : public SampleReg::SampleRegUCIfFactory
 {
 public:
-    explicit SampleRegUCHandlerFactory(std::shared_ptr<HubServerCallbacks> callbacks)
+    explicit SampleRegUCHandlerFactory(std::shared_ptr<ThriftServerCallbacks> callbacks)
         : callbacks_(std::move(callbacks))
     {
     }
@@ -86,32 +86,32 @@ public:
     }
 
 private:
-    std::shared_ptr<HubServerCallbacks> callbacks_;
+    std::shared_ptr<ThriftServerCallbacks> callbacks_;
 };
 
 } // namespace
 #endif
 
-struct HubServer::Impl
+struct ThriftServer::Impl
 {
 #if TRACKCAMHUB_ENABLE_THRIFT
-    std::shared_ptr<HubServerCallbacks> callbacks;
+    std::shared_ptr<ThriftServerCallbacks> callbacks;
     std::unique_ptr<apache::thrift::server::TServer> server;
     std::thread worker;
 #endif
 };
 
-HubServer::HubServer()
+ThriftServer::ThriftServer()
     : impl_(std::make_unique<Impl>())
 {
 }
 
-HubServer::~HubServer()
+ThriftServer::~ThriftServer()
 {
     stop();
 }
 
-bool HubServer::start(const HubConfig& config, HubServerCallbacks callbacks)
+bool ThriftServer::start(const ThriftServerConfig& config, ThriftServerCallbacks callbacks)
 {
     stop();
 
@@ -125,7 +125,7 @@ bool HubServer::start(const HubConfig& config, HubServerCallbacks callbacks)
 
     try
     {
-        impl_->callbacks = std::make_shared<HubServerCallbacks>(std::move(callbacks));
+        impl_->callbacks = std::make_shared<ThriftServerCallbacks>(std::move(callbacks));
 
         auto handler_factory = std::make_shared<SampleRegUCHandlerFactory>(impl_->callbacks);
         auto processor_factory = std::make_shared<SampleReg::SampleRegUCProcessorFactory>(handler_factory);
@@ -147,6 +147,7 @@ bool HubServer::start(const HubConfig& config, HubServerCallbacks callbacks)
         impl_->worker = std::thread([this] {
             try
             {
+                // 启动上位机 Thrift Server
                 impl_->server->serve();
             }
             catch (const std::exception& ex)
@@ -171,7 +172,7 @@ bool HubServer::start(const HubConfig& config, HubServerCallbacks callbacks)
 #endif
 }
 
-void HubServer::stop()
+void ThriftServer::stop()
 {
 #if TRACKCAMHUB_ENABLE_THRIFT
     if (impl_->server)

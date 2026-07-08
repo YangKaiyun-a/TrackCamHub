@@ -63,13 +63,12 @@ void CaptureWorkflow::onTrackSampleReady(const TrackSampleEvent& event)
 }
 
 #if TRACKCAMHUB_ENABLE_THRIFT
-void CaptureWorkflow::onTaskInfoChanged(const SampleReg::TaskInfo& info)
+bool CaptureWorkflow::onTaskInfoChanged(const SampleReg::TaskInfo& info)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     if (info.taskId != current_task_id_)
     {
-        Logger::warn("ignore TaskInfoChanged for unknown taskId=" + info.taskId);
-        return;
+        return false;
     }
 
     if (info.__isset.retCode)
@@ -82,6 +81,8 @@ void CaptureWorkflow::onTaskInfoChanged(const SampleReg::TaskInfo& info)
         current_finished_ = true;
         cv_.notify_all();
     }
+
+    return true;
 }
 #endif
 
@@ -96,7 +97,7 @@ std::string CaptureWorkflow::makeTaskId(const TrackSampleEvent& event)
     ++next_task_index_;
 
     std::ostringstream stream;
-    stream << "TCH-" << event.sample_id << "-N"
+    stream << "TCH-" << config_.id << "-" << event.sample_id << "-N"
            << std::setw(6) << std::setfill('0') << next_task_index_;
     return stream.str();
 }

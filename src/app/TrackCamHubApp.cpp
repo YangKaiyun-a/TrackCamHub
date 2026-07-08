@@ -2,8 +2,13 @@
 
 #include "app/Logger.h"
 #include "config/AppConfig.h"
+#include "serial/TrackSignalListener.h"
+#include "thrift/CameraClient.h"
+#include "workflow/CaptureResultSaver.h"
+#include "workflow/CaptureWorkflow.h"
 
 #include <filesystem>
+#include <memory>
 
 namespace trackcamhub
 {
@@ -29,6 +34,18 @@ std::filesystem::path appRootFromConfigPath(const std::string& config_path)
 
 } // namespace
 
+struct TrackCamHubApp::CameraRuntime
+{
+    CameraConfig camera_config;
+    TrackSerialConfig track_config;
+    CameraClient camera_client;
+    CaptureWorkflow workflow;
+    CaptureResultSaver capture_result_saver;
+    TrackSignalListener track_listener;
+};
+
+TrackCamHubApp::TrackCamHubApp() = default;
+
 TrackCamHubApp::~TrackCamHubApp()
 {
     stop();
@@ -44,49 +61,81 @@ bool TrackCamHubApp::start(const std::string& config_path)
     config_ = AppConfigLoader::load(config_path);
     Logger::info("loaded config: " + config_path);
 
-    camera_client_.configure(config_.camera);
-    workflow_.configure(config_.camera, &camera_client_);
-    capture_result_saver_.configure(config_.camera.image_capture_enabled,
-                                    appRootFromConfigPath(config_path) / "camera_images");
+    cameras_.clear();
+    const auto image_root = appRootFromConfigPath(config_path) / "camera_images";
+    for (std::size_t i = 0; i < config_.cameras.size(); ++i)
+    {
+        auto runtime = std::make_unique<CameraRuntime>();
+        runtime->camera_config = config_.cameras[i];
+        runtime->track_config = config_.tracks[i];
+        runtime->camera_client.configure(runtime->camera_config);
+        runtime->workflow.configure(runtime->camera_config, &runtime->camera_client);
+        runtime->capture_result_saver.configure(runtime->camera_config.image_capture_enabled,
+                                                image_root / runtime->camera_config.id);
+        cameras_.push_back(std::move(runtime));
+    }
 
-    HubServerCallbacks callbacks;
+    ThriftServerCallbacks callbacks;
 #if TRACKCAMHUB_ENABLE_THRIFT
     callbacks.task_changed = [this](const auto& info) {
-        capture_result_saver_.saveTaskInfo(info);
-        workflow_.onTaskInfoChanged(info);
+        for (const auto& camera : cameras_)
+        {
+            if (camera->workflow.onTaskInfoChanged(info))
+            {
+                camera->capture_result_saver.saveTaskInfo(info);
+                return;
+            }
+        }
+        Logger::warn("ignore TaskInfoChanged for unknown taskId=" + info.taskId);
     };
 #endif
 
-    if (!hub_server_.start(config_.hub, std::move(callbacks)))
+    if (!thrift_server_.start(config_.hub, std::move(callbacks)))
     {
         return false;
     }
 
     running_.store(true);
-    camera_client_.startHeartbeat();
+
+    for (const auto& camera : cameras_)
+    {
+        camera->camera_client.startHeartbeat();
+    }
 
     if (!direct_trigger_server_.start(config_.direct_trigger, [this](const TrackSampleEvent& event) {
-            workflow_.onTrackSampleReady(event);
+            if (!cameras_.empty())
+            {
+                cameras_.front()->workflow.onTrackSampleReady(event);
+            }
         }))
     {
         stop();
         return false;
     }
 
-    if (config_.track.enabled)
+    bool any_serial_enabled = false;
+    for (const auto& camera : cameras_)
     {
-        if (!track_listener_.start(config_.track, [this](const TrackSampleEvent& event) {
-                workflow_.onTrackSampleReady(event);
+        if (!camera->track_config.enabled)
+        {
+            Logger::warn("track serial listener disabled by config, cameraId=" + camera->camera_config.id);
+            continue;
+        }
+
+        any_serial_enabled = true;
+        auto* runtime = camera.get();
+        if (!runtime->track_listener.start(runtime->track_config, [runtime](const TrackSampleEvent& event) {
+                runtime->workflow.onTrackSampleReady(event);
             }))
         {
-            
             stop();
             return false;
         }
     }
-    else
+
+    if (!any_serial_enabled)
     {
-        Logger::warn("track serial listener disabled by config");
+        Logger::warn("all track serial listeners disabled by config");
     }
 
     return true;
@@ -99,10 +148,17 @@ void TrackCamHubApp::stop()
         return;
     }
 
-    track_listener_.stop();
+    for (const auto& camera : cameras_)
+    {
+        camera->track_listener.stop();
+    }
     direct_trigger_server_.stop();
-    camera_client_.stopHeartbeat();
-    hub_server_.stop();
+    for (const auto& camera : cameras_)
+    {
+        camera->camera_client.stopHeartbeat();
+    }
+    thrift_server_.stop();
+    cameras_.clear();
     Logger::info("TrackCamHub stopped");
 }
 

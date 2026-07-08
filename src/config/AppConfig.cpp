@@ -5,6 +5,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace trackcamhub
 {
@@ -56,6 +58,37 @@ std::string toString(const std::unordered_map<std::string, std::string>& values,
     return it == values.end() ? fallback : it->second;
 }
 
+std::string requireString(const std::unordered_map<std::string, std::string>& values, const std::string& key)
+{
+    const auto it = values.find(key);
+    if (it == values.end() || it->second.empty())
+    {
+        throw std::runtime_error("missing required config key: " + key);
+    }
+    return it->second;
+}
+
+std::vector<std::string> splitCsv(const std::string& value)
+{
+    std::vector<std::string> items;
+    std::size_t start = 0;
+    while (start <= value.size())
+    {
+        const auto end = value.find(',', start);
+        auto item = trim(value.substr(start, end == std::string::npos ? std::string::npos : end - start));
+        if (!item.empty())
+        {
+            items.push_back(std::move(item));
+        }
+        if (end == std::string::npos)
+        {
+            break;
+        }
+        start = end + 1;
+    }
+    return items;
+}
+
 } // namespace
 
 AppConfig AppConfigLoader::load(const std::string& path)
@@ -87,27 +120,54 @@ AppConfig AppConfigLoader::load(const std::string& path)
 
     AppConfig config;
     config.hub.uc_server_port = toInt(values, "hub.uc_server_port", config.hub.uc_server_port);
-
-    config.track.enabled = toBool(toString(values, "track.serial_enabled", config.track.enabled ? "true" : "false"));
-    config.track.port = toString(values, "track.port", config.track.port);
-    config.track.baud_rate = toInt(values, "track.baud_rate", config.track.baud_rate);
-    config.track.ready_command = toIntAutoBase(values, "track.ready_command", config.track.ready_command);
-
-    config.camera.id = toString(values, "camera.id", config.camera.id);
-    config.camera.host = toString(values, "camera.host", config.camera.host);
-    config.camera.port = toInt(values, "camera.port", config.camera.port);
-    config.camera.heartbeat_interval_ms = toInt(values, "camera.heartbeat_interval_ms", config.camera.heartbeat_interval_ms);
-    config.camera.heartbeat_fail_max = toInt(values, "camera.heartbeat_fail_max", config.camera.heartbeat_fail_max);
-    config.camera.capture_timeout_ms = toInt(values, "camera.capture_timeout_ms", config.camera.capture_timeout_ms);
-    config.camera.poll_interval_ms = toInt(values, "camera.poll_interval_ms", config.camera.poll_interval_ms);
-    config.camera.image_capture_enabled = toBool(toString(values,
-                                                          "camera.image_capture_enabled",
-                                                          config.camera.image_capture_enabled ? "true" : "false"));
     config.direct_trigger.enabled = toBool(toString(values,
                                                     "direct_trigger.enabled",
                                                     config.direct_trigger.enabled ? "true" : "false"));
     config.direct_trigger.host = toString(values, "direct_trigger.host", config.direct_trigger.host);
     config.direct_trigger.port = toInt(values, "direct_trigger.port", config.direct_trigger.port);
+
+    const auto camera_ids = splitCsv(toString(values, "camera.ids", ""));
+    if (camera_ids.empty())
+    {
+        throw std::runtime_error("missing required config key: camera.ids");
+    }
+
+    for (const auto& camera_id : camera_ids)
+    {
+        CameraConfig camera;
+        camera.id = camera_id;
+
+        const auto camera_prefix = "camera." + camera_id + ".";
+        camera.host = requireString(values, camera_prefix + "host");
+        camera.port = toInt(values, camera_prefix + "port", camera.port);
+        camera.heartbeat_interval_ms = toInt(values,
+                                             camera_prefix + "heartbeat_interval_ms",
+                                             camera.heartbeat_interval_ms);
+        camera.heartbeat_fail_max = toInt(values,
+                                          camera_prefix + "heartbeat_fail_max",
+                                          camera.heartbeat_fail_max);
+        camera.capture_timeout_ms = toInt(values,
+                                          camera_prefix + "capture_timeout_ms",
+                                          camera.capture_timeout_ms);
+        camera.poll_interval_ms = toInt(values,
+                                        camera_prefix + "poll_interval_ms",
+                                        camera.poll_interval_ms);
+        camera.image_capture_enabled = toBool(toString(values,
+                                                       camera_prefix + "image_capture_enabled",
+                                                       camera.image_capture_enabled ? "true" : "false"));
+
+        TrackSerialConfig track;
+        const auto track_prefix = "track." + camera_id + ".";
+        track.enabled = toBool(toString(values,
+                                        track_prefix + "serial_enabled",
+                                        track.enabled ? "true" : "false"));
+        track.port = requireString(values, track_prefix + "port");
+        track.baud_rate = toInt(values, track_prefix + "baud_rate", track.baud_rate);
+        track.ready_command = toIntAutoBase(values, track_prefix + "ready_command", track.ready_command);
+
+        config.cameras.push_back(std::move(camera));
+        config.tracks.push_back(std::move(track));
+    }
 
     return config;
 }

@@ -32,7 +32,7 @@ public:
     void onTrackSampleReady(const TrackSampleEvent& event);
 
 #if TRACKCAMHUB_ENABLE_THRIFT
-    void onTaskInfoChanged(const SampleReg::TaskInfo& info);
+    bool onTaskInfoChanged(const SampleReg::TaskInfo& info);
 #endif
 
     WorkflowState state() const;

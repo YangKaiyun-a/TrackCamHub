@@ -2,13 +2,12 @@
 
 #include "config/AppConfig.h"
 #include "control/DirectTriggerServer.h"
-#include "serial/TrackSignalListener.h"
-#include "thrift/CameraClient.h"
-#include "thrift/HubServer.h"
-#include "workflow/CaptureResultSaver.h"
-#include "workflow/CaptureWorkflow.h"
+#include "thrift/ThriftServer.h"
 
 #include <atomic>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace trackcamhub
 {
@@ -16,20 +15,19 @@ namespace trackcamhub
 class TrackCamHubApp
 {
 public:
-    TrackCamHubApp() = default;
+    TrackCamHubApp();
     ~TrackCamHubApp();
 
     bool start(const std::string& config_path);
     void stop();
 
 private:
+    struct CameraRuntime;
+
     AppConfig config_;
-    CameraClient camera_client_;
-    HubServer hub_server_;
+    ThriftServer thrift_server_;
     DirectTriggerServer direct_trigger_server_;
-    CaptureWorkflow workflow_;
-    CaptureResultSaver capture_result_saver_;
-    TrackSignalListener track_listener_;
+    std::vector<std::unique_ptr<CameraRuntime>> cameras_;
     std::atomic<bool> running_{false};
 };
 
