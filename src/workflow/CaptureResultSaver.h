@@ -31,6 +31,9 @@ private:
     bool saveResultImages(const SampleReg::TaskInfo& info,
                           const TimestampPaths& paths,
                           std::vector<std::string>& image_files) const;
+    bool saveImageOutImages(const SampleReg::TaskInfo& info,
+                            const TimestampPaths& paths,
+                            std::vector<std::string>& image_files) const;
     bool saveImage(const SampleReg::ImageInfo& image,
                    const std::filesystem::path& path_base,
                    std::string& saved_filename) const;

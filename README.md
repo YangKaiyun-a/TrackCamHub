@@ -43,7 +43,7 @@ TrackCamHub can save the selected result images and task result returned by the 
 1. The track serial signal triggers `SampleRegLC::DistributeTask`.
 2. The camera finishes capture and calls `SampleRegUC::TaskInfoChanged`.
 3. TrackCamHub saves `TaskInfo.result.bestBarcodeImage.bestBarcodeImage`,
-   `TaskInfo.result.bestLiquidImage.bestLiquidImage`, and `result.json`.
+   `TaskInfo.result.bestLiquidImage.bestLiquidImage`, `TaskInfo.imageOut`, and `result.json`.
 
 Enable saving in `config/trackcamhub.ini`:
 
@@ -63,6 +63,8 @@ with names such as:
 ```text
 best_barcode_image.ppm
 best_liquid_image.ppm
+imageOut\imageOut_1.ppm
+imageOut\imageOut_2.ppm
 result.json
 ```
 

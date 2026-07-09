@@ -40,7 +40,9 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
     }
 
     std::vector<std::string> image_files;
-    if (!saveResultImages(info, paths, image_files))
+    const bool saved_result_images = saveResultImages(info, paths, image_files);
+    const bool saved_image_out_images = saveImageOutImages(info, paths, image_files);
+    if (!saved_result_images && !saved_image_out_images)
     {
         Logger::warn("TaskInfoChanged contains no supported result image data, taskId=" + info.taskId);
     }
@@ -102,6 +104,44 @@ bool CaptureResultSaver::saveResultImages(const SampleReg::TaskInfo& info,
         {
             image_files.push_back(saved_filename);
             saved_any = true;
+        }
+    }
+
+    return saved_any;
+}
+
+bool CaptureResultSaver::saveImageOutImages(const SampleReg::TaskInfo& info,
+                                            const TimestampPaths& paths,
+                                            std::vector<std::string>& image_files) const
+{
+    if (!info.__isset.imageOut || info.imageOut.empty())
+    {
+        return false;
+    }
+
+    const auto image_out_dir = paths.directory / "imageOut";
+    std::error_code ec;
+    std::filesystem::create_directories(image_out_dir, ec);
+    if (ec)
+    {
+        Logger::error("failed to create imageOut directory: " + image_out_dir.string() + ", " + ec.message());
+        return false;
+    }
+
+    bool saved_any = false;
+    for (std::size_t i = 0; i < info.imageOut.size(); ++i)
+    {
+        std::string saved_filename;
+        const auto path_base = image_out_dir / ("imageOut_" + std::to_string(i + 1));
+        if (saveImage(info.imageOut[i], path_base, saved_filename))
+        {
+            image_files.push_back((std::filesystem::path("imageOut") / saved_filename).string());
+            saved_any = true;
+        }
+        else
+        {
+            Logger::warn("failed to save imageOut image, taskId=" + info.taskId +
+                         ", index=" + std::to_string(i + 1));
         }
     }
 
