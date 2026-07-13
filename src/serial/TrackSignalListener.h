@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -21,26 +22,34 @@ struct TrackSampleEvent
     std::uint16_t sequence = 0;
     std::uint8_t gripper_id = 0;
     std::uint8_t command = 0;
+    bool requires_track_release = false;
 };
 
 class TrackSignalListener
 {
 public:
     using Callback = std::function<void(const TrackSampleEvent&)>;
+    using ReleaseReadyCallback = std::function<void(std::uint16_t sequence, std::uint8_t gripper_id)>;
 
     TrackSignalListener() = default;
     ~TrackSignalListener();
 
-    bool start(const TrackSerialConfig& config, Callback callback);
+    bool start(const TrackSerialConfig& config,
+               Callback callback,
+               ReleaseReadyCallback release_ready_callback);
     void stop();
+    bool sendTrackRelease(const TrackSampleEvent& event);
 
 private:
     void run();
     void handleFrame(const std::vector<std::uint8_t>& frame);
+    bool sendFrame(std::uint16_t sequence, std::uint8_t gripper_id, std::uint8_t command, const char* label);
 
     TrackSerialConfig config_;
     Callback callback_;
+    ReleaseReadyCallback release_ready_callback_;
     SerialPort serial_;
+    std::mutex serial_write_mutex_;
     std::optional<TrackSampleEvent> pending_event_;
     std::atomic<bool> stopping_{true};
     std::thread worker_;

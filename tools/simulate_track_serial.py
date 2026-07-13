@@ -20,6 +20,8 @@ ESCAPE_ESCAPE = 0x00
 READY_COMMAND = 0x00
 ROTATION_SUCCESS_COMMAND = 0x2C
 ROTATION_FAILURE_COMMAND = 0x29
+TRACK_READY_TO_RELEASE_COMMAND = 0x3C
+TRACK_RELEASE_COMMAND = 0x4C
 CAMERA_ACK_COMMAND = 0x00
 
 
@@ -146,7 +148,7 @@ def read_frame(port, timeout: float) -> Optional[bytes]:
     return None
 
 
-def wait_for_ack(port, sequence: int, gripper_id: int, ack_command: int, timeout: float) -> bool:
+def wait_for_command(port, sequence: int, gripper_id: int, expected_command: int, timeout: float, label: str) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         remaining = max(0.0, deadline - time.monotonic())
@@ -164,10 +166,10 @@ def wait_for_ack(port, sequence: int, gripper_id: int, ack_command: int, timeout
         if (
             response_sequence == sequence
             and response_gripper == gripper_id
-            and response_command == (ack_command & 0xFF)
+            and response_command == (expected_command & 0xFF)
         ):
             print(
-                f"ack matched sequence={response_sequence} gripper={response_gripper} "
+                f"{label} matched sequence={response_sequence} gripper={response_gripper} "
                 f"command=0x{response_command:02X}"
             )
             return True
@@ -178,8 +180,8 @@ def wait_for_ack(port, sequence: int, gripper_id: int, ack_command: int, timeout
         )
 
     print(
-        f"ack timeout sequence={sequence} gripper={gripper_id} "
-        f"expected_command=0x{ack_command & 0xFF:02X}"
+        f"{label} timeout sequence={sequence} gripper={gripper_id} "
+        f"expected_command=0x{expected_command & 0xFF:02X}"
     )
     return False
 
@@ -192,7 +194,7 @@ def main() -> int:
         "--mode",
         choices=("sequence", "single", "fail"),
         default="sequence",
-        help="sequence sends ready, waits for software ack, then sends rotation-success. single sends only --command. fail sends ready, waits for ack, then sends rotation-failure.",
+        help="sequence sends ready, waits for the software ack, then sends rotation-success and release-ready before waiting for 0x4C. single sends only --command. fail sends ready, waits for ack, then sends rotation-failure.",
     )
     parser.add_argument("--command", type=parse_int, default=READY_COMMAND, help="Command byte for single mode.")
     parser.add_argument("--gripper", type=parse_int, default=1, help="Gripper id byte. Default: 1.")
@@ -216,6 +218,30 @@ def main() -> int:
         type=parse_int,
         default=CAMERA_ACK_COMMAND,
         help="Software ack command byte expected before sending rotation result. Default: 0x00.",
+    )
+    parser.add_argument(
+        "--release-ready-command",
+        type=parse_int,
+        default=TRACK_READY_TO_RELEASE_COMMAND,
+        help="Command byte sent when the lower controller is ready to move the tube out. Default: 0x3c.",
+    )
+    parser.add_argument(
+        "--release-command",
+        type=parse_int,
+        default=TRACK_RELEASE_COMMAND,
+        help="Software command byte expected after image saving completes. Default: 0x4c.",
+    )
+    parser.add_argument(
+        "--release-ready-delay",
+        type=float,
+        default=0.0,
+        help="Seconds between rotation-success and release-ready in sequence mode. Default: 0.",
+    )
+    parser.add_argument(
+        "--release-timeout",
+        type=float,
+        default=30.0,
+        help="Seconds to wait for the software release command in sequence mode. Default: 30.",
     )
     parser.add_argument(
         "--ready-command",
@@ -249,7 +275,12 @@ def main() -> int:
                 send_frame(port, sequence, args.gripper, args.command, payload)
             else:
                 send_frame(port, sequence, args.gripper, args.ready_command, payload)
-                if not wait_for_ack(port, sequence, args.gripper, args.ack_command, args.ack_timeout):
+                if not wait_for_command(port,
+                                        sequence,
+                                        args.gripper,
+                                        args.ack_command,
+                                        args.ack_timeout,
+                                        "software ack"):
                     if args.count != 1:
                         time.sleep(args.interval)
                     continue
@@ -258,6 +289,17 @@ def main() -> int:
                     time.sleep(args.rotation_delay)
                 rotation_command = args.success_command if args.mode == "sequence" else args.failure_command
                 send_frame(port, sequence, args.gripper, rotation_command)
+
+                if args.mode == "sequence":
+                    if args.release_ready_delay > 0:
+                        time.sleep(args.release_ready_delay)
+                    send_frame(port, sequence, args.gripper, args.release_ready_command)
+                    wait_for_command(port,
+                                     sequence,
+                                     args.gripper,
+                                     args.release_command,
+                                     args.release_timeout,
+                                     "software release command")
 
             if args.count != 1:
                 time.sleep(args.interval)

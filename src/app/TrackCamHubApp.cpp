@@ -69,9 +69,14 @@ bool TrackCamHubApp::start(const std::string& config_path)
         runtime->camera_config = config_.cameras[i];
         runtime->track_config = config_.tracks[i];
         runtime->camera_client.configure(runtime->camera_config);
-        runtime->workflow.configure(runtime->camera_config, &runtime->camera_client);
         runtime->capture_result_saver.configure(runtime->camera_config.image_capture_enabled,
                                                 image_root / runtime->camera_config.id);
+        runtime->workflow.configure(runtime->camera_config,
+                                    &runtime->camera_client,
+                                    &runtime->capture_result_saver,
+                                    [listener = &runtime->track_listener](const TrackSampleEvent& event) {
+                                        return listener->sendTrackRelease(event);
+                                    });
         cameras_.push_back(std::move(runtime));
     }
 
@@ -82,7 +87,6 @@ bool TrackCamHubApp::start(const std::string& config_path)
         {
             if (camera->workflow.onTaskInfoChanged(info))
             {
-                camera->capture_result_saver.saveTaskInfo(info);
                 return;
             }
         }
@@ -124,9 +128,13 @@ bool TrackCamHubApp::start(const std::string& config_path)
 
         any_serial_enabled = true;
         auto* runtime = camera.get();
-        if (!runtime->track_listener.start(runtime->track_config, [runtime](const TrackSampleEvent& event) {
-                runtime->workflow.onTrackSampleReady(event);
-            }))
+        if (!runtime->track_listener.start(runtime->track_config,
+                                           [runtime](const TrackSampleEvent& event) {
+                                               runtime->workflow.onTrackSampleReady(event);
+                                           },
+                                           [runtime](std::uint16_t sequence, std::uint8_t gripper_id) {
+                                               runtime->workflow.onTrackReleaseReady(sequence, gripper_id);
+                                           }))
         {
             stop();
             return false;
@@ -158,6 +166,10 @@ void TrackCamHubApp::stop()
         camera->camera_client.stopHeartbeat();
     }
     thrift_server_.stop();
+    for (const auto& camera : cameras_)
+    {
+        camera->workflow.stop();
+    }
     cameras_.clear();
     Logger::info("TrackCamHub stopped");
 }

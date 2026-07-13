@@ -55,7 +55,7 @@ private:
 #endif
 
     bool enabled_ = false;
-    std::filesystem::path output_root_;
+    std::filesystem::path output_root_;     ///< 存图路径
 };
 
 } // namespace trackcamhub

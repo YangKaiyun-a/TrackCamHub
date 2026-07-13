@@ -21,6 +21,8 @@ constexpr std::uint8_t kEscapeEscape = 0x00;
 constexpr std::uint8_t kCameraAckCommand = 0x00;
 constexpr std::uint8_t kRotationSuccessCommand = 0x2C;
 constexpr std::uint8_t kRotationFailureCommand = 0x29;
+constexpr std::uint8_t kTrackReadyToReleaseCommand = 0x3C;
+constexpr std::uint8_t kTrackReleaseCommand = 0x4C;
 
 std::string toHex(const std::vector<std::uint8_t>& bytes)
 {
@@ -98,11 +100,14 @@ TrackSignalListener::~TrackSignalListener()
     stop();
 }
 
-bool TrackSignalListener::start(const TrackSerialConfig& config, Callback callback)
+bool TrackSignalListener::start(const TrackSerialConfig& config,
+                                Callback callback,
+                                ReleaseReadyCallback release_ready_callback)
 {
     stop();
     config_ = config;
     callback_ = std::move(callback);
+    release_ready_callback_ = std::move(release_ready_callback);
 
     if (!serial_.open(config_.port, config_.baud_rate))
     {
@@ -124,6 +129,11 @@ void TrackSignalListener::stop()
     {
         worker_.join();
     }
+}
+
+bool TrackSignalListener::sendTrackRelease(const TrackSampleEvent& event)
+{
+    return sendFrame(event.sequence, event.gripper_id, kTrackReleaseCommand, "track release command");
 }
 
 void TrackSignalListener::run()
@@ -231,10 +241,21 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     const std::uint8_t gripper_id = frame[2];
     const std::uint8_t command = frame[3];
 
-    Logger::debug("track serial frame: " + toHex(frame));
+    Logger::debug("track serial received: " + toHex(frame));
+    if (command == kTrackReadyToReleaseCommand)
+    {
+        Logger::info("track ready to release, sequence=" + std::to_string(sequence) +
+                     ", gripper=" + std::to_string(gripper_id));
+        if (release_ready_callback_)
+        {
+            release_ready_callback_(sequence, gripper_id);
+        }
+        return;
+    }
+
     if (command == kRotationSuccessCommand)
     {
-        Logger::info("track rotation completed, sequence=" + std::to_string(sequence) +
+        Logger::info("track rotation start, sequence=" + std::to_string(sequence) +
                      ", gripper=" + std::to_string(gripper_id));
         if (!pending_event_)
         {
@@ -243,6 +264,12 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
         }
 
         auto event = *pending_event_;
+        if (event.sequence != sequence || event.gripper_id != gripper_id)
+        {
+            Logger::warn("ignore rotation success for a different pending capture event, sequence=" +
+                         std::to_string(sequence) + ", gripper=" + std::to_string(gripper_id));
+            return;
+        }
         pending_event_.reset();
         if (callback_)
         {
@@ -264,14 +291,8 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
         return;
     }
 
-    const auto reply = buildFrame(sequence, gripper_id, kCameraAckCommand);
-    if (serial_.writeBytes(reply))
+    if (!sendFrame(sequence, gripper_id, kCameraAckCommand, "track serial reply"))
     {
-        Logger::info("track serial reply sent: " + toHex(reply));
-    }
-    else
-    {
-        Logger::error("track serial reply failed: " + serial_.lastError());
         return;
     }
 
@@ -281,6 +302,7 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     event.sequence = sequence;
     event.gripper_id = gripper_id;
     event.command = command;
+    event.requires_track_release = true;
 
     if (pending_event_)
     {
@@ -288,7 +310,23 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
                      ", new=" + event.sample_id);
     }
     pending_event_ = event;
-    Logger::info("track capture event pending until rotation success: " + event.sample_id);
+}
+
+bool TrackSignalListener::sendFrame(std::uint16_t sequence,
+                                    std::uint8_t gripper_id,
+                                    std::uint8_t command,
+                                    const char* label)
+{
+    const auto frame = buildFrame(sequence, gripper_id, command);
+    std::lock_guard<std::mutex> lock(serial_write_mutex_);
+    if (!serial_.writeBytes(frame))
+    {
+        Logger::error(std::string(label) + " failed: " + serial_.lastError());
+        return false;
+    }
+
+    Logger::info(std::string(label) + " sent: " + toHex(frame));
+    return true;
 }
 
 } // namespace trackcamhub
