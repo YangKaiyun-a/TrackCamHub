@@ -163,7 +163,6 @@ AppConfig AppConfigLoader::load(const std::string& path)
                                         track.enabled ? "true" : "false"));
         track.port = requireString(values, track_prefix + "port");
         track.baud_rate = toInt(values, track_prefix + "baud_rate", track.baud_rate);
-        track.ready_command = toIntAutoBase(values, track_prefix + "ready_command", track.ready_command);
 
         config.cameras.push_back(std::move(camera));
         config.tracks.push_back(std::move(track));

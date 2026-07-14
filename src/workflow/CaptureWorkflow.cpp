@@ -268,7 +268,12 @@ bool CaptureWorkflow::waitForResult(const std::string& task_id)
 
     if (callback_done)
     {
-        return current_ret_code_.value_or(-1) == 0;
+        if (current_ret_code_ && *current_ret_code_ != 0)
+        {
+            Logger::warn("capture task finished with nonzero retCode, continue workflow, taskId=" + task_id +
+                         ", retCode=" + std::to_string(*current_ret_code_));
+        }
+        return true;
     }
 
     Logger::error("capture task timeout: " + task_id);

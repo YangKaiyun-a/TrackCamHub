@@ -18,6 +18,7 @@ constexpr std::uint8_t kEscape = 0x1B;
 constexpr std::uint8_t kEscapeHead = 0xEA;
 constexpr std::uint8_t kEscapeTail = 0xEB;
 constexpr std::uint8_t kEscapeEscape = 0x00;
+constexpr std::uint8_t kCameraPositionCommand = 0x00;
 constexpr std::uint8_t kCameraAckCommand = 0x00;
 constexpr std::uint8_t kRotationSuccessCommand = 0x2C;
 constexpr std::uint8_t kRotationFailureCommand = 0x29;
@@ -242,6 +243,15 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     const std::uint8_t command = frame[3];
 
     Logger::debug("track serial received: " + toHex(frame));
+    const bool is_short_frame = frame.size() == 5;
+    const bool is_camera_position_frame = frame.size() == 8 && command == kCameraPositionCommand;
+    if (!is_short_frame && !is_camera_position_frame)
+    {
+        Logger::warn("unexpected track frame size or command, bytes=" + std::to_string(frame.size()) +
+                     ", command=" + toHex({command}));
+        return;
+    }
+
     if (command == kTrackReadyToReleaseCommand)
     {
         Logger::info("track ready to release, sequence=" + std::to_string(sequence) +
@@ -286,7 +296,7 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
         return;
     }
 
-    if (command != static_cast<std::uint8_t>(config_.ready_command))
+    if (!is_camera_position_frame)
     {
         return;
     }

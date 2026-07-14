@@ -17,7 +17,7 @@ ESCAPE = 0x1B
 ESCAPE_HEAD = 0xEA
 ESCAPE_TAIL = 0xEB
 ESCAPE_ESCAPE = 0x00
-READY_COMMAND = 0x00
+CAMERA_POSITION_COMMAND = 0x00
 ROTATION_SUCCESS_COMMAND = 0x2C
 ROTATION_FAILURE_COMMAND = 0x29
 TRACK_READY_TO_RELEASE_COMMAND = 0x3C
@@ -194,9 +194,9 @@ def main() -> int:
         "--mode",
         choices=("sequence", "single", "fail"),
         default="sequence",
-        help="sequence sends ready, waits for the software ack, then sends rotation-success and release-ready before waiting for 0x4C. single sends only --command. fail sends ready, waits for ack, then sends rotation-failure.",
+        help="sequence sends the 10-byte camera-position frame, waits for the software ack, then sends 7-byte rotation-success and release-ready frames before waiting for 0x4C. single sends only --command. fail sends the camera-position frame, waits for ack, then sends rotation-failure.",
     )
-    parser.add_argument("--command", type=parse_int, default=READY_COMMAND, help="Command byte for single mode.")
+    parser.add_argument("--command", type=parse_int, default=CAMERA_POSITION_COMMAND, help="Command byte for single mode.")
     parser.add_argument("--gripper", type=parse_int, default=1, help="Gripper id byte. Default: 1.")
     parser.add_argument("--sequence", type=parse_int, default=1, help="First sequence number. Default: 1.")
     parser.add_argument("--interval", type=float, default=0.0, help="Seconds between frames in loop mode.")
@@ -244,11 +244,16 @@ def main() -> int:
         help="Seconds to wait for the software release command in sequence mode. Default: 30.",
     )
     parser.add_argument(
+        "--camera-position-command",
         "--ready-command",
+        dest="camera_position_command",
         type=parse_int,
-        default=READY_COMMAND,
-        help="Ready command byte used in sequence/fail mode. Default: 0x00.",
+        default=CAMERA_POSITION_COMMAND,
+        help="Command byte used by the 10-byte camera-position frame in sequence/fail mode. Default: 0x00.",
     )
+    parser.add_argument("--reserved-1", type=parse_int, default=0, help="Byte5 of the camera-position frame. Default: 0.")
+    parser.add_argument("--reserved-2", type=parse_int, default=0, help="Byte6 of the camera-position frame. Default: 0.")
+    parser.add_argument("--speed", type=parse_int, default=0, help="Byte7 speed of the camera-position frame. Default: 0.")
     parser.add_argument(
         "--success-command",
         type=parse_int,
@@ -274,7 +279,14 @@ def main() -> int:
             if args.mode == "single":
                 send_frame(port, sequence, args.gripper, args.command, payload)
             else:
-                send_frame(port, sequence, args.gripper, args.ready_command, payload)
+                camera_position_payload = bytes((args.reserved_1 & 0xFF,
+                                                 args.reserved_2 & 0xFF,
+                                                 args.speed & 0xFF))
+                send_frame(port,
+                           sequence,
+                           args.gripper,
+                           args.camera_position_command,
+                           camera_position_payload)
                 if not wait_for_command(port,
                                         sequence,
                                         args.gripper,

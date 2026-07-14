@@ -12,7 +12,6 @@ struct TrackSerialConfig
     bool enabled = false;
     std::string port = "COM3";
     int baud_rate = 115200;
-    int ready_command = 0x00;
 };
 
 struct CameraConfig

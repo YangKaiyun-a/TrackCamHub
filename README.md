@@ -125,16 +125,15 @@ When the serial listener is enabled, TrackCamHub waits for the rotation-success 
 
 ```ini
 track.camera-1.serial_enabled=true
-track.camera-1.ready_command=0x00
 ```
 
 Flow:
 
-1. Lower controller sends the configured ready command, for example `track.camera-1.ready_command`.
-2. TrackCamHub replies `0x00` on the same serial port and stores the pending capture event.
-3. Lower controller rotates the sample base.
-4. Lower controller sends `0x2c` when rotation succeeds.
-5. TrackCamHub dispatches the camera capture task.
+1. Lower controller sends the 10-byte camera-position frame: `0x7e`, sequence, gripper id, command `0x00`, two reserved bytes, speed, checksum, `0xe7`.
+2. TrackCamHub replies with the 7-byte `0x00` frame on the same serial port and stores the pending capture event.
+3. Lower controller rotates the sample base, then sends the 7-byte `0x2c` frame when rotation succeeds.
+4. TrackCamHub dispatches the camera capture task, saves the result, and waits for the matching 7-byte `0x3c` frame.
+5. TrackCamHub sends a matching 7-byte `0x4c` frame to allow the lower controller to move the tube out.
 
 If the lower controller sends `0x29`, TrackCamHub logs rotation failure and drops the pending capture event.
 
