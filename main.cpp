@@ -2,13 +2,40 @@
 #include "app/Logger.h"
 #include "app/ServiceRunner.h"
 
+#include <atomic>
+#include <chrono>
 #include <exception>
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <thread>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace
 {
+
+std::atomic<bool> g_console_stop_requested{false};
+
+#ifdef _WIN32
+BOOL WINAPI consoleControlHandler(DWORD control_type)
+{
+    switch (control_type)
+    {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_LOGOFF_EVENT:
+    case CTRL_SHUTDOWN_EVENT:
+        g_console_stop_requested.store(true);
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+#endif
 
 std::filesystem::path executableDirectory(char* argv0)
 {
@@ -36,8 +63,23 @@ int runConsole(const std::string& config_path)
         return 1;
     }
 
-    std::cout << "TrackCamHub is running. Press Enter to stop..." << std::endl;
-    std::cin.get();
+    g_console_stop_requested.store(false);
+#ifdef _WIN32
+    if (!SetConsoleCtrlHandler(consoleControlHandler, TRUE))
+    {
+        trackcamhub::Logger::warn("failed to register console control handler");
+    }
+#endif
+
+    std::cout << "TrackCamHub is running. Press Ctrl+C to stop." << std::endl;
+    while (!g_console_stop_requested.load())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+
+#ifdef _WIN32
+    SetConsoleCtrlHandler(consoleControlHandler, FALSE);
+#endif
     app.stop();
     return 0;
 }
