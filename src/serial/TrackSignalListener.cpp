@@ -112,13 +112,13 @@ bool TrackSignalListener::start(const TrackSerialConfig& config,
 
     if (!serial_.open(config_.port, config_.baud_rate))
     {
-        Logger::error("serial open failed on " + config_.port + ": " + serial_.lastError());
+        Logger::error(withPort("serial open failed: " + serial_.lastError()));
         return false;
     }
 
     stopping_.store(false);
     worker_ = std::thread([this] { run(); });
-    Logger::info("track serial listener started on " + config_.port);
+    Logger::info(withPort("track serial listener started"));
     return true;
 }
 
@@ -134,7 +134,10 @@ void TrackSignalListener::stop()
 
 bool TrackSignalListener::sendTrackRelease(const TrackSampleEvent& event)
 {
-    return sendFrame(event.sequence, event.gripper_id, kTrackReleaseCommand, "track release command");
+    return sendFrame(event.protocol_sequence,
+                     event.protocol_gripper_id,
+                     kTrackReleaseCommand,
+                     "track release command");
 }
 
 void TrackSignalListener::run()
@@ -181,7 +184,7 @@ void TrackSignalListener::run()
             }
             else
             {
-                Logger::warn("invalid serial escape sequence: 0x" + toHex({byte}));
+                Logger::warn(withPort("invalid serial escape sequence: " + toHex({byte})));
                 frame.clear();
                 in_frame = false;
             }
@@ -205,7 +208,7 @@ void TrackSignalListener::run()
 
         if (byte == kFrameHead)
         {
-            Logger::warn("serial frame restarted before tail");
+            Logger::warn(withPort("serial frame restarted before tail"));
             frame.clear();
             escaping = false;
             continue;
@@ -214,7 +217,7 @@ void TrackSignalListener::run()
         frame.push_back(byte);
         if (frame.size() > 256)
         {
-            Logger::warn("serial frame exceeded 256 bytes, dropping buffer");
+            Logger::warn(withPort("serial frame exceeded 256 bytes, dropping buffer"));
             frame.clear();
             in_frame = false;
             escaping = false;
@@ -226,7 +229,7 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
 {
     if (frame.size() < 5)
     {
-        Logger::warn("serial frame too short: " + toHex(frame));
+        Logger::warn(withPort("serial frame too short: " + toHex(frame)));
         return;
     }
 
@@ -234,7 +237,7 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     const auto actual_checksum = frame.back();
     if (actual_checksum != expected_checksum)
     {
-        Logger::warn("serial checksum mismatch, frame=" + toHex(frame));
+        Logger::warn(withPort("serial checksum mismatch, frame=" + toHex(frame)));
         return;
     }
 
@@ -242,44 +245,36 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     const std::uint8_t gripper_id = frame[2];
     const std::uint8_t command = frame[3];
 
-    Logger::debug("track serial received: " + toHex(frame));
+    Logger::debug(withPort("track serial received: " + toHex(frame)));
     const bool is_short_frame = frame.size() == 5;
     const bool is_camera_position_frame = frame.size() == 8 && command == kCameraPositionCommand;
     if (!is_short_frame && !is_camera_position_frame)
     {
-        Logger::warn("unexpected track frame size or command, bytes=" + std::to_string(frame.size()) +
-                     ", command=" + toHex({command}));
+        Logger::warn(withPort("unexpected track frame size or command, bytes=" +
+                              std::to_string(frame.size()) + ", command=" + toHex({command})));
         return;
     }
 
     if (command == kTrackReadyToReleaseCommand)
     {
-        Logger::info("track ready to release, sequence=" + std::to_string(sequence) +
-                     ", gripper=" + std::to_string(gripper_id));
+        Logger::info(withPort("track ready to release"));
         if (release_ready_callback_)
         {
-            release_ready_callback_(sequence, gripper_id);
+            release_ready_callback_();
         }
         return;
     }
 
     if (command == kRotationSuccessCommand)
     {
-        Logger::info("track rotation start, sequence=" + std::to_string(sequence) +
-                     ", gripper=" + std::to_string(gripper_id));
+        Logger::info(withPort("track rotation start"));
         if (!pending_event_)
         {
-            Logger::warn("ignore rotation success without pending capture event");
+            Logger::warn(withPort("ignore rotation success without pending capture event"));
             return;
         }
 
         auto event = *pending_event_;
-        if (event.sequence != sequence || event.gripper_id != gripper_id)
-        {
-            Logger::warn("ignore rotation success for a different pending capture event, sequence=" +
-                         std::to_string(sequence) + ", gripper=" + std::to_string(gripper_id));
-            return;
-        }
         pending_event_.reset();
         if (callback_)
         {
@@ -290,8 +285,7 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
 
     if (command == kRotationFailureCommand)
     {
-        Logger::warn("track rotation failed, sequence=" + std::to_string(sequence) +
-                     ", gripper=" + std::to_string(gripper_id));
+        Logger::warn(withPort("track rotation failed"));
         pending_event_.reset();
         return;
     }
@@ -307,17 +301,16 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     }
 
     TrackSampleEvent event;
-    event.sample_id = "SEQ" + std::to_string(sequence) + "-G" + std::to_string(gripper_id);
+    event.sample_id = "TRACK";
     event.raw_message = toHex(frame);
-    event.sequence = sequence;
-    event.gripper_id = gripper_id;
+    event.protocol_sequence = sequence;
+    event.protocol_gripper_id = gripper_id;
     event.command = command;
     event.requires_track_release = true;
 
     if (pending_event_)
     {
-        Logger::warn("replace pending capture event before rotation result, old=" + pending_event_->sample_id +
-                     ", new=" + event.sample_id);
+        Logger::warn(withPort("replace pending capture event before rotation result"));
     }
     pending_event_ = event;
 }
@@ -331,12 +324,17 @@ bool TrackSignalListener::sendFrame(std::uint16_t sequence,
     std::lock_guard<std::mutex> lock(serial_write_mutex_);
     if (!serial_.writeBytes(frame))
     {
-        Logger::error(std::string(label) + " failed: " + serial_.lastError());
+        Logger::error(withPort(std::string(label) + " failed: " + serial_.lastError()));
         return false;
     }
 
-    Logger::info(std::string(label) + " sent: " + toHex(frame));
+    Logger::info(withPort(std::string(label) + " sent: " + toHex(frame)));
     return true;
+}
+
+std::string TrackSignalListener::withPort(const std::string& message) const
+{
+    return "[port=" + config_.port + "] " + message;
 }
 
 } // namespace trackcamhub

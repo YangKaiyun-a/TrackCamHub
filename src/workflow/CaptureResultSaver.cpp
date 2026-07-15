@@ -11,10 +11,15 @@
 namespace trackcamhub
 {
 
-void CaptureResultSaver::configure(bool enabled, std::filesystem::path output_root)
+void CaptureResultSaver::configure(bool enabled,
+                                   std::filesystem::path output_root,
+                                   std::string camera_id,
+                                   std::string serial_port)
 {
     enabled_ = enabled;
     output_root_ = std::move(output_root);
+    camera_id_ = std::move(camera_id);
+    serial_port_ = std::move(serial_port);
 }
 
 #if TRACKCAMHUB_ENABLE_THRIFT
@@ -35,7 +40,8 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
     std::filesystem::create_directories(paths.directory, ec);
     if (ec)
     {
-        Logger::error("failed to create camera image directory: " + paths.directory.string() + ", " + ec.message());
+        Logger::error(logContext() + "failed to create camera image directory: " +
+                      paths.directory.string() + ", " + ec.message());
         return;
     }
 
@@ -44,12 +50,13 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
     const bool saved_image_out_images = saveImageOutImages(info, paths, image_files);
     if (!saved_result_images && !saved_image_out_images)
     {
-        Logger::warn("TaskInfoChanged contains no supported result image data, taskId=" + info.taskId);
+        Logger::warn(logContext() + "TaskInfoChanged contains no supported result image data, taskId=" +
+                     info.taskId);
     }
 
     if (!saveMetadata(info, paths, image_files))
     {
-        Logger::error("failed to save capture result metadata, taskId=" + info.taskId);
+        Logger::error(logContext() + "failed to save capture result metadata, taskId=" + info.taskId);
     }
 }
 
@@ -124,7 +131,8 @@ bool CaptureResultSaver::saveImageOutImages(const SampleReg::TaskInfo& info,
     std::filesystem::create_directories(image_out_dir, ec);
     if (ec)
     {
-        Logger::error("failed to create imageOut directory: " + image_out_dir.string() + ", " + ec.message());
+        Logger::error(logContext() + "failed to create imageOut directory: " +
+                      image_out_dir.string() + ", " + ec.message());
         return false;
     }
 
@@ -140,7 +148,7 @@ bool CaptureResultSaver::saveImageOutImages(const SampleReg::TaskInfo& info,
         }
         else
         {
-            Logger::warn("failed to save imageOut image, taskId=" + info.taskId +
+            Logger::warn(logContext() + "failed to save imageOut image, taskId=" + info.taskId +
                          ", index=" + std::to_string(i + 1));
         }
     }
@@ -182,7 +190,7 @@ bool CaptureResultSaver::saveImage(const SampleReg::ImageInfo& image,
         return false;
     }
 
-    Logger::warn("capture image byte size does not match raw gray/BGR layout, width=" +
+    Logger::warn(logContext() + "capture image byte size does not match raw gray/BGR layout, width=" +
                  std::to_string(image.width) + ", height=" + std::to_string(image.height) +
                  ", dataBytes=" + std::to_string(image.data.size()) +
                  ", grayExpected=" + std::to_string(gray_size) +
@@ -210,7 +218,7 @@ bool CaptureResultSaver::saveGrayImage(const std::filesystem::path& path,
 
     output << "P5\n" << width << ' ' << height << "\n255\n";
     output.write(data.data(), static_cast<std::streamsize>(data.size()));
-    Logger::info("saved capture image: " + path.string());
+    Logger::info(logContext() + "saved capture image: " + path.string());
     return true;
 }
 
@@ -226,13 +234,16 @@ bool CaptureResultSaver::saveBgrImageAsPpm(const std::filesystem::path& path,
     }
 
     output << "P6\n" << width << ' ' << height << "\n255\n";
+    std::string rgb(data.size(), '\0');
     for (std::size_t i = 0; i + 2 < data.size(); i += 3)
     {
-        const char rgb[] = {data[i + 2], data[i + 1], data[i]};
-        output.write(rgb, sizeof(rgb));
+        rgb[i] = data[i + 2];
+        rgb[i + 1] = data[i + 1];
+        rgb[i + 2] = data[i];
     }
+    output.write(rgb.data(), static_cast<std::streamsize>(rgb.size()));
 
-    Logger::info("saved capture image: " + path.string());
+    Logger::info(logContext() + "saved capture image: " + path.string());
     return true;
 }
 
@@ -245,7 +256,7 @@ bool CaptureResultSaver::saveRawImage(const std::filesystem::path& path, const s
     }
 
     output.write(data.data(), static_cast<std::streamsize>(data.size()));
-    Logger::info("saved raw capture image: " + path.string());
+    Logger::info(logContext() + "saved raw capture image: " + path.string());
     return true;
 }
 
@@ -282,7 +293,7 @@ bool CaptureResultSaver::saveMetadata(const SampleReg::TaskInfo& info,
            << (info.__isset.result ? jsonEscape(resultTextWithoutImages(info.result)) : "") << "\"\n";
     output << "}\n";
 
-    Logger::info("saved capture metadata: " + path.string());
+    Logger::info(logContext() + "saved capture metadata: " + path.string());
     return true;
 }
 
@@ -349,6 +360,11 @@ std::string CaptureResultSaver::jsonEscape(const std::string& value)
         }
     }
     return escaped.str();
+}
+
+std::string CaptureResultSaver::logContext() const
+{
+    return "[cameraId=" + camera_id_ + ", port=" + serial_port_ + "] ";
 }
 #endif
 

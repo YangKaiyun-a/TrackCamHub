@@ -148,7 +148,7 @@ def read_frame(port, timeout: float) -> Optional[bytes]:
     return None
 
 
-def wait_for_command(port, sequence: int, gripper_id: int, expected_command: int, timeout: float, label: str) -> bool:
+def wait_for_command(port, expected_command: int, timeout: float, label: str) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         remaining = max(0.0, deadline - time.monotonic())
@@ -163,26 +163,16 @@ def wait_for_command(port, sequence: int, gripper_id: int, expected_command: int
             continue
 
         response_sequence, response_gripper, response_command, _ = parsed
-        if (
-            response_sequence == sequence
-            and response_gripper == gripper_id
-            and response_command == (expected_command & 0xFF)
-        ):
+        if response_command == (expected_command & 0xFF):
             print(
                 f"{label} matched sequence={response_sequence} gripper={response_gripper} "
                 f"command=0x{response_command:02X}"
             )
             return True
 
-        print(
-            f"ignored unmatched response sequence={response_sequence} "
-            f"gripper={response_gripper} command=0x{response_command:02X}"
-        )
+        print(f"ignored unmatched response command=0x{response_command:02X}")
 
-    print(
-        f"{label} timeout sequence={sequence} gripper={gripper_id} "
-        f"expected_command=0x{expected_command & 0xFF:02X}"
-    )
+    print(f"{label} timeout expected_command=0x{expected_command & 0xFF:02X}")
     return False
 
 
@@ -192,9 +182,9 @@ def main() -> int:
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate. Default: 115200.")
     parser.add_argument(
         "--mode",
-        choices=("sequence", "single", "fail"),
-        default="sequence",
-        help="sequence sends the 10-byte camera-position frame, waits for the software ack, then sends 7-byte rotation-success and release-ready frames before waiting for 0x4C. single sends only --command. fail sends the camera-position frame, waits for ack, then sends rotation-failure.",
+        choices=("workflow", "single", "fail"),
+        default="workflow",
+        help="workflow sends the 10-byte camera-position frame, waits for the software ack, then sends 7-byte rotation-success and release-ready frames before waiting for 0x4C. single sends only --command. fail sends the camera-position frame, waits for ack, then sends rotation-failure.",
     )
     parser.add_argument("--command", type=parse_int, default=CAMERA_POSITION_COMMAND, help="Command byte for single mode.")
     parser.add_argument("--gripper", type=parse_int, default=1, help="Gripper id byte. Default: 1.")
@@ -205,7 +195,7 @@ def main() -> int:
         "--rotation-delay",
         type=float,
         default=0.2,
-        help="Seconds between matched ack and rotation result in sequence/fail mode. Default: 0.2.",
+        help="Seconds between matched ack and rotation result in workflow/fail mode. Default: 0.2.",
     )
     parser.add_argument(
         "--ack-timeout",
@@ -235,13 +225,13 @@ def main() -> int:
         "--release-ready-delay",
         type=float,
         default=0.0,
-        help="Seconds between rotation-success and release-ready in sequence mode. Default: 0.",
+        help="Seconds between rotation-success and release-ready in workflow mode. Default: 0.",
     )
     parser.add_argument(
         "--release-timeout",
         type=float,
         default=30.0,
-        help="Seconds to wait for the software release command in sequence mode. Default: 30.",
+        help="Seconds to wait for the software release command in workflow mode. Default: 30.",
     )
     parser.add_argument(
         "--camera-position-command",
@@ -249,7 +239,7 @@ def main() -> int:
         dest="camera_position_command",
         type=parse_int,
         default=CAMERA_POSITION_COMMAND,
-        help="Command byte used by the 10-byte camera-position frame in sequence/fail mode. Default: 0x00.",
+        help="Command byte used by the 10-byte camera-position frame in workflow/fail mode. Default: 0x00.",
     )
     parser.add_argument("--reserved-1", type=parse_int, default=0, help="Byte5 of the camera-position frame. Default: 0.")
     parser.add_argument("--reserved-2", type=parse_int, default=0, help="Byte6 of the camera-position frame. Default: 0.")
@@ -258,7 +248,7 @@ def main() -> int:
         "--success-command",
         type=parse_int,
         default=ROTATION_SUCCESS_COMMAND,
-        help="Rotation success command byte used in sequence mode. Default: 0x2c.",
+        help="Rotation success command byte used in workflow mode. Default: 0x2c.",
     )
     parser.add_argument(
         "--failure-command",
@@ -288,8 +278,6 @@ def main() -> int:
                            args.camera_position_command,
                            camera_position_payload)
                 if not wait_for_command(port,
-                                        sequence,
-                                        args.gripper,
                                         args.ack_command,
                                         args.ack_timeout,
                                         "software ack"):
@@ -299,16 +287,14 @@ def main() -> int:
 
                 if args.rotation_delay > 0:
                     time.sleep(args.rotation_delay)
-                rotation_command = args.success_command if args.mode == "sequence" else args.failure_command
+                rotation_command = args.success_command if args.mode == "workflow" else args.failure_command
                 send_frame(port, sequence, args.gripper, rotation_command)
 
-                if args.mode == "sequence":
+                if args.mode == "workflow":
                     if args.release_ready_delay > 0:
                         time.sleep(args.release_ready_delay)
                     send_frame(port, sequence, args.gripper, args.release_ready_command)
                     wait_for_command(port,
-                                     sequence,
-                                     args.gripper,
                                      args.release_command,
                                      args.release_timeout,
                                      "software release command")

@@ -14,7 +14,10 @@ namespace trackcamhub
 class CaptureResultSaver
 {
 public:
-    void configure(bool enabled, std::filesystem::path output_root);
+    void configure(bool enabled,
+                   std::filesystem::path output_root,
+                   std::string camera_id,
+                   std::string serial_port);
 
 #if TRACKCAMHUB_ENABLE_THRIFT
     void saveTaskInfo(const SampleReg::TaskInfo& info);
@@ -52,10 +55,13 @@ private:
     std::string resultFlagsJson(const SampleReg::TaskResult& result) const;
     std::string resultTextWithoutImages(const SampleReg::TaskResult& result) const;
     static std::string jsonEscape(const std::string& value);
+    std::string logContext() const;
 #endif
 
     bool enabled_ = false;
     std::filesystem::path output_root_;     ///< 存图路径
+    std::string camera_id_;
+    std::string serial_port_;
 };
 
 } // namespace trackcamhub

@@ -70,8 +70,11 @@ bool TrackCamHubApp::start(const std::string& config_path)
         runtime->track_config = config_.tracks[i];
         runtime->camera_client.configure(runtime->camera_config);
         runtime->capture_result_saver.configure(runtime->camera_config.image_capture_enabled,
-                                                image_root / runtime->camera_config.id);
+                                                image_root / runtime->camera_config.id,
+                                                runtime->camera_config.id,
+                                                runtime->track_config.port);
         runtime->workflow.configure(runtime->camera_config,
+                                    runtime->track_config.port,
                                     &runtime->camera_client,
                                     &runtime->capture_result_saver,
                                     [listener = &runtime->track_listener](const TrackSampleEvent& event) {
@@ -90,7 +93,7 @@ bool TrackCamHubApp::start(const std::string& config_path)
                 return;
             }
         }
-        Logger::warn("ignore TaskInfoChanged for unknown taskId=" + info.taskId);
+        Logger::warn("[port=unknown] ignore TaskInfoChanged for unknown taskId=" + info.taskId);
     };
 #endif
 
@@ -109,6 +112,10 @@ bool TrackCamHubApp::start(const std::string& config_path)
     if (!direct_trigger_server_.start(config_.direct_trigger, [this](const TrackSampleEvent& event) {
             if (!cameras_.empty())
             {
+                Logger::info("[cameraId=" + cameras_.front()->camera_config.id +
+                             ", port=" + cameras_.front()->track_config.port +
+                             "] direct trigger request: " + event.sample_id +
+                             ", raw=" + event.raw_message);
                 cameras_.front()->workflow.onTrackSampleReady(event);
             }
         }))
@@ -132,8 +139,8 @@ bool TrackCamHubApp::start(const std::string& config_path)
                                            [runtime](const TrackSampleEvent& event) {
                                                runtime->workflow.onTrackSampleReady(event);
                                            },
-                                           [runtime](std::uint16_t sequence, std::uint8_t gripper_id) {
-                                               runtime->workflow.onTrackReleaseReady(sequence, gripper_id);
+                                           [runtime] {
+                                               runtime->workflow.onTrackReleaseReady();
                                            }))
         {
             stop();

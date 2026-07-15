@@ -4,6 +4,7 @@
 #include "workflow/CaptureResultSaver.h"
 
 #include <chrono>
+#include <ctime>
 #include <iomanip>
 #include <sstream>
 #include <utility>
@@ -17,6 +18,7 @@ CaptureWorkflow::~CaptureWorkflow()
 }
 
 void CaptureWorkflow::configure(CameraConfig config,
+                                std::string serial_port,
                                 CameraClient* camera_client,
                                 CaptureResultSaver* result_saver,
                                 TrackReleaseSender track_release_sender)
@@ -26,6 +28,7 @@ void CaptureWorkflow::configure(CameraConfig config,
     {
         std::lock_guard<std::mutex> lock(mutex_);
         config_ = std::move(config);
+        serial_port_ = std::move(serial_port);
         camera_client_ = camera_client;
         result_saver_ = result_saver;
         track_release_sender_ = std::move(track_release_sender);
@@ -56,19 +59,19 @@ void CaptureWorkflow::onTrackSampleReady(const TrackSampleEvent& event)
     std::lock_guard<std::mutex> lock(mutex_);
     if (!camera_client_)
     {
-        Logger::error("capture workflow has no camera client");
+        Logger::error(logContext() + "capture workflow has no camera client");
         return;
     }
 
     if (stopping_ || state_ != WorkflowState::Idle)
     {
-        Logger::warn("drop sample-ready event while workflow is busy, raw=" + event.raw_message);
+        Logger::warn(logContext() + "drop sample-ready event while workflow is busy, raw=" + event.raw_message);
         return;
     }
 
     PendingTask task;
     task.event = event;
-    task.task_id = makeTaskId(event);
+    task.task_id = makeTaskId();
 
     state_ = WorkflowState::Dispatching;
     current_task_id_ = task.task_id;
@@ -83,20 +86,17 @@ void CaptureWorkflow::onTrackSampleReady(const TrackSampleEvent& event)
     cv_.notify_all();
 }
 
-void CaptureWorkflow::onTrackReleaseReady(std::uint16_t sequence, std::uint8_t gripper_id)
+void CaptureWorkflow::onTrackReleaseReady()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!current_event_ || !current_event_->requires_track_release ||
-        current_event_->sequence != sequence || current_event_->gripper_id != gripper_id)
+    if (!current_event_ || !current_event_->requires_track_release)
     {
-        Logger::warn("ignore track release-ready for unrelated task, sequence=" + std::to_string(sequence) +
-                     ", gripper=" + std::to_string(gripper_id));
+        Logger::warn(logContext() + "ignore track release-ready without an active track task");
         return;
     }
 
     current_release_ready_ = true;
-    Logger::info("track release-ready matched current task, sequence=" + std::to_string(sequence) +
-                 ", gripper=" + std::to_string(gripper_id));
+    Logger::info(logContext() + "track release-ready matched current task, taskId=" + current_task_id_);
     cv_.notify_all();
 }
 
@@ -113,6 +113,11 @@ bool CaptureWorkflow::onTaskInfoChanged(const SampleReg::TaskInfo& info)
     {
         current_ret_code_ = info.retCode;
     }
+
+    Logger::info(logContext() + "TaskInfoChanged received, taskId=" + info.taskId +
+                 ", state=" + std::to_string(static_cast<int>(info.state)) +
+                 ", retCode=" + (info.__isset.retCode ? std::to_string(info.retCode) : "unset") +
+                 ", result=" + (info.__isset.result ? "set" : "unset"));
 
     if (info.state == SampleReg::TaskState::Finished)
     {
@@ -156,10 +161,11 @@ void CaptureWorkflow::run()
 
 void CaptureWorkflow::executeTask(const PendingTask& task)
 {
-    Logger::info("dispatch capture task: " + task.task_id);
+    Logger::info(logContext() + "dispatch capture task: " + task.task_id);
     if (!camera_client_->distributeCaptureTask(task.task_id))
     {
-        Logger::error("dispatch capture task failed: " + camera_client_->lastError());
+        Logger::error(logContext() + "dispatch capture task failed, taskId=" + task.task_id +
+                      ", error=" + camera_client_->lastError());
         std::lock_guard<std::mutex> lock(mutex_);
         if (!stopping_)
         {
@@ -198,7 +204,7 @@ void CaptureWorkflow::executeTask(const PendingTask& task)
         }
         if (!current_task_info_)
         {
-            Logger::error("capture task finished without TaskInfo payload: " + task.task_id);
+            Logger::error(logContext() + "capture task finished without TaskInfo payload: " + task.task_id);
             resetTaskStateLocked(WorkflowState::Error);
             return;
         }
@@ -243,14 +249,33 @@ void CaptureWorkflow::executeTask(const PendingTask& task)
     resetTaskStateLocked(released ? WorkflowState::Idle : WorkflowState::Error);
 }
 
-std::string CaptureWorkflow::makeTaskId(const TrackSampleEvent& event)
+std::string CaptureWorkflow::makeTaskId()
 {
     ++next_task_index_;
 
+    const auto now = std::chrono::system_clock::now();
+    const auto time = std::chrono::system_clock::to_time_t(now);
+    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  now.time_since_epoch()) %
+                              1000;
+
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &time);
+#else
+    localtime_r(&time, &tm);
+#endif
+
     std::ostringstream stream;
-    stream << "TCH-" << config_.id << "-" << event.sample_id << "-N"
+    stream << "TCH-" << config_.id << '-' << std::put_time(&tm, "%Y%m%dT%H%M%S")
+           << std::setw(3) << std::setfill('0') << milliseconds.count() << "-N"
            << std::setw(6) << std::setfill('0') << next_task_index_;
     return stream.str();
+}
+
+std::string CaptureWorkflow::logContext() const
+{
+    return "[cameraId=" + config_.id + ", port=" + serial_port_ + "] ";
 }
 
 bool CaptureWorkflow::waitForResult(const std::string& task_id)
@@ -270,13 +295,13 @@ bool CaptureWorkflow::waitForResult(const std::string& task_id)
     {
         if (current_ret_code_ && *current_ret_code_ != 0)
         {
-            Logger::warn("capture task finished with nonzero retCode, continue workflow, taskId=" + task_id +
+            Logger::warn(logContext() + "capture task finished with nonzero retCode, continue workflow, taskId=" + task_id +
                          ", retCode=" + std::to_string(*current_ret_code_));
         }
         return true;
     }
 
-    Logger::error("capture task timeout: " + task_id);
+    Logger::error(logContext() + "capture task timeout: " + task_id);
     return false;
 }
 

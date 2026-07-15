@@ -178,7 +178,6 @@ void DirectTriggerServer::handleClient(SOCKET client)
     }
 
     const auto event = makeEvent(request);
-    Logger::info("direct trigger request: " + event.sample_id + ", raw=" + event.raw_message);
 
     const char* response = "ACCEPTED\n";
     send(client, response, static_cast<int>(std::strlen(response)), 0);
@@ -197,8 +196,6 @@ TrackSampleEvent DirectTriggerServer::makeEvent(std::string request_text)
     TrackSampleEvent event;
     event.sample_id = "API" + std::to_string(request_id);
     event.raw_message = std::move(request_text);
-    event.sequence = static_cast<std::uint16_t>(request_id & 0xFFFF);
-    event.gripper_id = 0;
     event.command = 0;
     return event;
 }

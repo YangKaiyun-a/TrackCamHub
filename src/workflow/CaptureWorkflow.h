@@ -44,12 +44,13 @@ public:
     CaptureWorkflow& operator=(const CaptureWorkflow&) = delete;
 
     void configure(CameraConfig config,
+                   std::string serial_port,
                    CameraClient* camera_client,
                    CaptureResultSaver* result_saver,
                    TrackReleaseSender track_release_sender);
     void stop();
     void onTrackSampleReady(const TrackSampleEvent& event);
-    void onTrackReleaseReady(std::uint16_t sequence, std::uint8_t gripper_id);
+    void onTrackReleaseReady();
 
 #if TRACKCAMHUB_ENABLE_THRIFT
     bool onTaskInfoChanged(const SampleReg::TaskInfo& info);
@@ -64,13 +65,15 @@ private:
         std::string task_id;
     };
 
-    std::string makeTaskId(const TrackSampleEvent& event);
+    std::string makeTaskId();
+    std::string logContext() const;
     bool waitForResult(const std::string& task_id);
     void run();
     void executeTask(const PendingTask& task);
     void resetTaskStateLocked(WorkflowState state);
 
     CameraConfig config_;
+    std::string serial_port_;
     CameraClient* camera_client_ = nullptr;
     CaptureResultSaver* result_saver_ = nullptr;
     TrackReleaseSender track_release_sender_;
