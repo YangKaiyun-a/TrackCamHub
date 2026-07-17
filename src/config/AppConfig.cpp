@@ -152,9 +152,9 @@ AppConfig AppConfigLoader::load(const std::string& path)
         camera.poll_interval_ms = toInt(values,
                                         camera_prefix + "poll_interval_ms",
                                         camera.poll_interval_ms);
-        camera.image_capture_enabled = toBool(toString(values,
-                                                       camera_prefix + "image_capture_enabled",
-                                                       camera.image_capture_enabled ? "true" : "false"));
+        camera.save_image_out_enabled = toBool(toString(values,
+                                                        camera_prefix + "save_image_out_enabled",
+                                                        camera.save_image_out_enabled ? "true" : "false"));
 
         TrackSerialConfig track;
         const auto track_prefix = "track." + camera_id + ".";

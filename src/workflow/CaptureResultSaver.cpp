@@ -11,12 +11,12 @@
 namespace trackcamhub
 {
 
-void CaptureResultSaver::configure(bool enabled,
+void CaptureResultSaver::configure(bool save_image_out_enabled,
                                    std::filesystem::path output_root,
                                    std::string camera_id,
                                    std::string serial_port)
 {
-    enabled_ = enabled;
+    save_image_out_enabled_ = save_image_out_enabled;
     output_root_ = std::move(output_root);
     camera_id_ = std::move(camera_id);
     serial_port_ = std::move(serial_port);
@@ -25,11 +25,6 @@ void CaptureResultSaver::configure(bool enabled,
 #if TRACKCAMHUB_ENABLE_THRIFT
 void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
 {
-    if (!enabled_)
-    {
-        return;
-    }
-
     if (info.state != SampleReg::TaskState::Finished)
     {
         return;
@@ -47,11 +42,17 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
 
     std::vector<std::string> image_files;
     const bool saved_result_images = saveResultImages(info, paths, image_files);
-    const bool saved_image_out_images = saveImageOutImages(info, paths, image_files);
+
+    if (!save_image_out_enabled_ && info.__isset.imageOut && !info.imageOut.empty())
+    {
+        Logger::info(logContext() + "skip imageOut images by config, taskId=" + info.taskId);
+    }
+    const bool saved_image_out_images = save_image_out_enabled_
+                                            ? saveImageOutImages(info, paths, image_files)
+                                            : false;
     if (!saved_result_images && !saved_image_out_images)
     {
-        Logger::warn(logContext() + "TaskInfoChanged contains no supported result image data, taskId=" +
-                     info.taskId);
+        Logger::warn(logContext() + "TaskInfoChanged contains no supported result image data, taskId=" + info.taskId);
     }
 
     if (!saveMetadata(info, paths, image_files))

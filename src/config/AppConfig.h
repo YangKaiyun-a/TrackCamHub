@@ -23,7 +23,7 @@ struct CameraConfig
     int heartbeat_fail_max = 3;
     int capture_timeout_ms = 15000;
     int poll_interval_ms = 200;
-    bool image_capture_enabled = false;
+    bool save_image_out_enabled = false;
 };
 
 struct ThriftServerConfig

@@ -69,7 +69,7 @@ bool TrackCamHubApp::start(const std::string& config_path)
         runtime->camera_config = config_.cameras[i];
         runtime->track_config = config_.tracks[i];
         runtime->camera_client.configure(runtime->camera_config);
-        runtime->capture_result_saver.configure(runtime->camera_config.image_capture_enabled,
+        runtime->capture_result_saver.configure(runtime->camera_config.save_image_out_enabled,
                                                 image_root / runtime->camera_config.id,
                                                 runtime->camera_config.id,
                                                 runtime->track_config.port);

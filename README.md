@@ -45,12 +45,15 @@ TrackCamHub can save the selected result images and task result returned by the 
 3. TrackCamHub saves `TaskInfo.result.bestBarcodeImage.bestBarcodeImage`,
    `TaskInfo.result.bestLiquidImage.bestLiquidImage`, `TaskInfo.imageOut`, and `result.json`.
 
-Enable saving in `config/trackcamhub.ini`:
+Control `TaskInfo.imageOut` saving independently for each camera in `config/trackcamhub.ini`:
 
 ```ini
-camera.camera-1.image_capture_enabled=true
-camera.camera-2.image_capture_enabled=true
+camera.camera-1.save_image_out_enabled=true
+camera.camera-2.save_image_out_enabled=false
 ```
+
+`bestBarcodeImage`, `bestLiquidImage`, and `result.json` are always saved when a
+capture result is received. This switch only controls the `imageOut` directory.
 
 Files are saved under:
 
@@ -83,13 +86,13 @@ camera.ids=camera-1,camera-2
 
 camera.camera-1.host=172.30.1.111
 camera.camera-1.port=7082
-camera.camera-1.image_capture_enabled=true
+camera.camera-1.save_image_out_enabled=true
 track.camera-1.serial_enabled=true
 track.camera-1.port=COM7
 
 camera.camera-2.host=172.30.1.112
 camera.camera-2.port=7082
-camera.camera-2.image_capture_enabled=true
+camera.camera-2.save_image_out_enabled=false
 track.camera-2.serial_enabled=true
 track.camera-2.port=COM8
 ```

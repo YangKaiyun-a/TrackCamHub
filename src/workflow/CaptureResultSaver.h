@@ -14,7 +14,7 @@ namespace trackcamhub
 class CaptureResultSaver
 {
 public:
-    void configure(bool enabled,
+    void configure(bool save_image_out_enabled,
                    std::filesystem::path output_root,
                    std::string camera_id,
                    std::string serial_port);
@@ -58,7 +58,7 @@ private:
     std::string logContext() const;
 #endif
 
-    bool enabled_ = false;
+    bool save_image_out_enabled_ = false;
     std::filesystem::path output_root_;     ///< 存图路径
     std::string camera_id_;
     std::string serial_port_;
