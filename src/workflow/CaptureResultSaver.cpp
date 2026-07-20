@@ -41,8 +41,11 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
     }
 
     std::vector<std::string> image_files;
+
+    // 1、存储最佳图片
     const bool saved_result_images = saveResultImages(info, paths, image_files);
 
+    // 2、存储 20 张图片
     if (!save_image_out_enabled_ && info.__isset.imageOut && !info.imageOut.empty())
     {
         Logger::info(logContext() + "skip imageOut images by config, taskId=" + info.taskId);
@@ -55,6 +58,7 @@ void CaptureResultSaver::saveTaskInfo(const SampleReg::TaskInfo& info)
         Logger::warn(logContext() + "TaskInfoChanged contains no supported result image data, taskId=" + info.taskId);
     }
 
+    // 3、记录
     if (!saveMetadata(info, paths, image_files))
     {
         Logger::error(logContext() + "failed to save capture result metadata, taskId=" + info.taskId);
@@ -278,6 +282,8 @@ bool CaptureResultSaver::saveMetadata(const SampleReg::TaskInfo& info,
     output << "  \"mode\": " << info.mode << ",\n";
     output << "  \"retCode\": " << info.retCode << ",\n";
     output << "  \"resultPresent\": " << (info.__isset.result ? "true" : "false") << ",\n";
+    output << "  \"imageOutCount\": "
+           << (info.__isset.imageOut ? info.imageOut.size() : 0) << ",\n";
     output << "  \"imageFiles\": [";
     for (std::size_t i = 0; i < image_files.size(); ++i)
     {
