@@ -245,7 +245,7 @@ void TrackSignalListener::handleFrame(const std::vector<std::uint8_t>& frame)
     const std::uint8_t gripper_id = frame[2];
     const std::uint8_t command = frame[3];
 
-    Logger::debug(withPort("track serial received: " + toHex(frame)));
+    Logger::info(withPort("track serial received: " + toHex(frame)));
     const bool is_short_frame = frame.size() == 5;
     const bool is_camera_position_frame = frame.size() == 8 && command == kCameraPositionCommand;
     if (!is_short_frame && !is_camera_position_frame)
