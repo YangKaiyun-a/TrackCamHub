@@ -24,17 +24,13 @@ enum class LogLevel
 class Logger
 {
 public:
-    static void setLogFile(const std::string& path)
+    static void setLogDirectory(const std::string& path)
     {
         std::lock_guard<std::mutex> lock(mutex());
-        logFilePath() = path;
+        logDirectory() = path;
         if (!path.empty())
         {
-            const std::filesystem::path file_path(path);
-            if (file_path.has_parent_path())
-            {
-                std::filesystem::create_directories(file_path.parent_path());
-            }
+            std::filesystem::create_directories(path);
         }
     }
 
@@ -64,9 +60,12 @@ private:
         auto& out = level == LogLevel::Error ? std::cerr : std::cout;
         out << line.str() << std::endl;
 
-        if (!logFilePath().empty())
+        if (!logDirectory().empty())
         {
-            std::ofstream file(logFilePath(), std::ios::app);
+            std::ostringstream file_name;
+            file_name << std::put_time(&tm, "%F") << ".log";
+            const auto file_path = std::filesystem::path(logDirectory()) / file_name.str();
+            std::ofstream file(file_path, std::ios::app);
             if (file)
             {
                 file << line.str() << std::endl;
@@ -92,7 +91,7 @@ private:
         return instance;
     }
 
-    static std::string& logFilePath()
+    static std::string& logDirectory()
     {
         static std::string path;
         return path;

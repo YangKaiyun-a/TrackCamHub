@@ -12,3 +12,4 @@ dist/
 tools/__pycache__/
 
 camera_images/
+log/

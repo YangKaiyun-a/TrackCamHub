@@ -89,7 +89,7 @@ int runConsole(const std::string& config_path)
 int main(int argc, char* argv[])
 {
     const auto exe_dir = executableDirectory(argc > 0 ? argv[0] : nullptr);
-    trackcamhub::Logger::setLogFile((exe_dir / "logs" / "TrackCamHub.log").string());
+    trackcamhub::Logger::setLogDirectory((exe_dir / "log").string());
 
     std::string mode = "--console";
     std::string config_path = (exe_dir / "config" / "trackcamhub.ini").string();

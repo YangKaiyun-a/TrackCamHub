@@ -175,7 +175,7 @@ install_service.bat
 Service logs are written to:
 
 ```text
-logs\TrackCamHub.log
+log\YYYY-MM-DD.log
 ```
 
 ## Vendored Runtime

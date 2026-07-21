@@ -39,5 +39,5 @@ net start "%SERVICE_NAME%"
 
 echo.
 echo Service installed and started.
-echo Logs: "%BASE_DIR%logs\TrackCamHub.log"
+echo Logs: "%BASE_DIR%log\YYYY-MM-DD.log"
 pause

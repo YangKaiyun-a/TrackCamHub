@@ -35,7 +35,7 @@ if (Test-Path -LiteralPath $OutputPath) {
 New-Item -ItemType Directory -Force -Path $OutputPath | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $OutputPath "config") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $OutputPath "docs") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $OutputPath "logs") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $OutputPath "log") | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $BuildPath "TrackCamHub.exe") -Destination $OutputPath
 if (Test-Path -LiteralPath (Join-Path $BuildPath "TriggerCapture.exe")) {
