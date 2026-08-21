@@ -189,7 +189,9 @@ void CaptureWorkflow::executeTask(const PendingTask& task)
         std::lock_guard<std::mutex> lock(mutex_);
         if (!stopping_)
         {
-            resetTaskStateLocked(WorkflowState::Error);
+            resetTaskStateLocked(WorkflowState::Idle);
+            Logger::warn(logContext() + "capture task timeout recovered; workflow is ready for the next task, taskId=" +
+                         task.task_id);
         }
         return;
     }
